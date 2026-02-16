@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+tech_monk/
+
+# データベース
+*.db
+*.sqlite3
+
+# ログ
+*.log
+
+# 認証情報
+google_credentials.json
+credentials.json
+token.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# テスト
+.pytest_cache/
+htmlcov/
+.coverage

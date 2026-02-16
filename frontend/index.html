@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2D5F2D">
+    <meta name="description" content="タスクを解析してGoogleカレンダーに同期するPWA">
+    <title>Task Sync - タスク同期アプリ</title>
+    
+    <!-- PWA設定 -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Yu Gothic UI', 'Meiryo', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .install-prompt {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .install-prompt.show {
+            display: flex;
+        }
+        
+        .install-prompt button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: white;
+            color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #45a049;
+        }
+        
+        .results {
+            display: none;
+        }
+        
+        .results.show {
+            display: block;
+        }
+        
+        .task-item {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .task-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .task-meta {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 13px;
+        }
+        
+        .badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .badge-temple { background: #e3f2fd; color: #1976d2; }
+        .badge-seihoukai { background: #fff3e0; color: #f57c00; }
+        .badge-eidoubu { background: #f3e5f5; color: #7b1fa2; }
+        .badge-personal { background: #e8f5e9; color: #388e3c; }
+        
+        .deadline {
+            color: #666;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            color: #667eea;
+            margin: 20px 0;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 16px 0;
+            display: none;
+        }
+        
+        .error.show {
+            display: block;
+        }
+        
+        .success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 16px 0;
+            display: none;
+        }
+        
+        .success.show {
+            display: block;
+        }
+        
+        .example {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
+        
+        .sync-btn {
+            margin-top: 16px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .history-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .history-date {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Task Sync</h1>
+            <p>タスクを解析してGoogleカレンダーに同期</p>
+        </div>
+        
+        <!-- PWAインストールプロンプト -->
+        <div class="install-prompt" id="installPrompt">
+            <span>📱 ホーム画面に追加してアプリとして使えます</span>
+            <button id="installBtn">追加</button>
+        </div>
+        
+        <!-- タブ -->
+        <div class="tabs">
+            <button class="tab active" data-tab="parse">解析</button>
+            <button class="tab" data-tab="history">履歴</button>
+            <button class="tab" data-tab="stats">統計</button>
+        </div>
+        
+        <!-- タブ1: 解析 -->
+        <div class="tab-content active" id="tab-parse">
+            <div class="card">
+                <div class="input-group">
+                    <label for="taskInput">タスクを入力（1行1タスク）</label>
+                    <textarea id="taskInput" placeholder="例：&#10;青鳳会の会議資料準備 (3/15まで)&#10;お寺の掃除 (早め)&#10;詠道部の練習 (5月中)"></textarea>
+                    <div class="example">
+                        💡 日付の書き方: (3/15まで) (5月中) (早め) (至急) (来週まで)
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" id="parseBtn">解析する</button>
+                
+                <div class="loading" id="loading">
+                    <p>⏳ 解析中...</p>
+                </div>
+                
+                <div class="error" id="error"></div>
+                <div class="success" id="success"></div>
+            </div>
+            
+            <div class="card results" id="results">
+                <h3 style="margin-bottom: 16px;">📊 解析結果</h3>
+                <div id="taskList"></div>
+                <button class="btn btn-success sync-btn" id="syncBtn">📅 Googleカレンダーに同期</button>
+            </div>
+        </div>
+        
+        <!-- タブ2: 履歴 -->
+        <div class="tab-content" id="tab-history">
+            <div class="card">
+                <h3 style="margin-bottom: 16px;">📜 タスク履歴</h3>
+                <div id="historyList">
+                    <p style="color: #999; text-align: center;">読み込み中...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- タブ3: 統計 -->
+        <div class="tab-content" id="tab-stats">
+            <div class="card">
+                <h3 style="margin-bottom: 16px;">📈 統計情報</h3>
+                <div class="stats" id="statsGrid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="statTotal">-</div>
+                        <div class="stat-label">総タスク数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="statMonth">-</div>
+                        <div class="stat-label">今月</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="statSynced">-</div>
+                        <div class="stat-label">同期済み</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="statPending">-</div>
+                        <div class="stat-label">未同期</div>
+                    </div>
+                </div>
+                <div id="categoryStats"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = '';
+        let parsedTasks = [];
+        let deferredPrompt;
+        
+        // 要素取得
+        const taskInput = document.getElementById('taskInput');
+        const parseBtn = document.getElementById('parseBtn');
+        const syncBtn = document.getElementById('syncBtn');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const success = document.getElementById('success');
+        const results = document.getElementById('results');
+        const taskList = document.getElementById('taskList');
+        const installPrompt = document.getElementById('installPrompt');
+        const installBtn = document.getElementById('installBtn');
+        
+        // タブ切り替え
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // タブのアクティブ化
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // コンテンツの切り替え
+                const tabName = tab.dataset.tab;
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById(`tab-${tabName}`).classList.add('active');
+                
+                // 履歴・統計タブを開いたらデータ読み込み
+                if (tabName === 'history') loadHistory();
+                if (tabName === 'stats') loadStats();
+            });
+        });
+        
+        // PWAインストールプロンプト
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installPrompt.classList.add('show');
+        });
+        
+        installBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            deferredPrompt = null;
+            installPrompt.classList.remove('show');
+        });
+        
+        // 解析ボタン
+        parseBtn.addEventListener('click', async () => {
+            const text = taskInput.value.trim();
+            
+            if (!text) {
+                showError('タスクを入力してください');
+                return;
+            }
+            
+            const tasks = text.split('\n').filter(t => t.trim());
+            
+            if (tasks.length === 0) {
+                showError('有効なタスクがありません');
+                return;
+            }
+            
+            loading.classList.add('show');
+            parseBtn.disabled = true;
+            error.classList.remove('show');
+            success.classList.remove('show');
+            results.classList.remove('show');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/parse-batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tasks })
+                });
+                
+                if (!response.ok) throw new Error('解析に失敗しました');
+                
+                parsedTasks = await response.json();
+                displayResults(parsedTasks);
+                showSuccess(`${parsedTasks.length}件のタスクを解析しました`);
+                
+            } catch (err) {
+                showError('エラーが発生しました: ' + err.message);
+            } finally {
+                loading.classList.remove('show');
+                parseBtn.disabled = false;
+            }
+        });
+        
+        // 結果表示
+        function displayResults(tasks) {
+            taskList.innerHTML = '';
+            
+            tasks.forEach(task => {
+                const item = document.createElement('div');
+                item.className = 'task-item';
+                
+                const categoryClass = {
+                    '寺院関係': 'temple',
+                    '青鳳会': 'seihoukai',
+                    '詠道部': 'eidoubu',
+                    '個人': 'personal'
+                }[task.category] || 'personal';
+                
+                const deadlineText = task.deadline 
+                    ? new Date(task.deadline).toLocaleDateString('ja-JP', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    })
+                    : '期限なし';
+                
+                item.innerHTML = `
+                    <div class="task-title">${task.title}</div>
+                    <div class="task-meta">
+                        <span class="badge badge-${categoryClass}">${task.category}</span>
+                        <span class="deadline">📅 ${deadlineText}</span>
+                    </div>
+                `;
+                
+                taskList.appendChild(item);
+            });
+            
+            results.classList.add('show');
+        }
+        
+        // 同期ボタン
+        syncBtn.addEventListener('click', () => {
+            alert('Google Calendar API連携は次のステップで実装します！\n\nGOOGLE_CALENDAR_SETUP.mdを参照してください。');
+        });
+        
+        // 履歴読み込み
+        async function loadHistory() {
+            const historyList = document.getElementById('historyList');
+            historyList.innerHTML = '<p style="color: #999; text-align: center;">データベース機能は実装中...</p>';
+            
+            // TODO: データベースAPIエンドポイント実装後に有効化
+            /*
+            try {
+                const response = await fetch(`${API_BASE}/api/history`);
+                const data = await response.json();
+                // 履歴を表示
+            } catch (err) {
+                historyList.innerHTML = '<p style="color: #999;">履歴を読み込めませんでした</p>';
+            }
+            */
+        }
+        
+        // 統計読み込み
+        async function loadStats() {
+            document.getElementById('statTotal').textContent = '-';
+            document.getElementById('statMonth').textContent = '-';
+            document.getElementById('statSynced').textContent = '-';
+            document.getElementById('statPending').textContent = '-';
+            
+            // TODO: データベースAPIエンドポイント実装後に有効化
+        }
+        
+        // エラー表示
+        function showError(message) {
+            error.textContent = message;
+            error.classList.add('show');
+            setTimeout(() => error.classList.remove('show'), 5000);
+        }
+        
+        // 成功表示
+        function showSuccess(message) {
+            success.textContent = message;
+            success.classList.add('show');
+            setTimeout(() => success.classList.remove('show'), 3000);
+        }
+        
+        // PWA: Service Worker登録
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(reg => console.log('✅ Service Worker registered'))
+                .catch(err => console.log('❌ Service Worker registration failed:', err));
+        }
+    </script>
+</body>
+</html>

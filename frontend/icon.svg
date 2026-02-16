@@ -1,0 +1,31 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="512" height="512" fill="#667eea" rx="80"/>
+  
+  <!-- チェックリストアイコン -->
+  <g transform="translate(128, 100)">
+    <!-- リスト背景 -->
+    <rect x="0" y="0" width="256" height="320" fill="white" rx="16"/>
+    
+    <!-- チェックマーク1 -->
+    <circle cx="40" cy="60" r="20" fill="#4caf50"/>
+    <path d="M 30 60 L 37 67 L 50 54" stroke="white" stroke-width="4" fill="none"/>
+    <rect x="70" y="50" width="160" height="20" fill="#e0e0e0" rx="4"/>
+    
+    <!-- チェックマーク2 -->
+    <circle cx="40" cy="140" r="20" fill="#4caf50"/>
+    <path d="M 30 140 L 37 147 L 50 134" stroke="white" stroke-width="4" fill="none"/>
+    <rect x="70" y="130" width="160" height="20" fill="#e0e0e0" rx="4"/>
+    
+    <!-- チェックマーク3（未完了） -->
+    <circle cx="40" cy="220" r="20" fill="#e0e0e0"/>
+    <rect x="70" y="210" width="160" height="20" fill="#e0e0e0" rx="4"/>
+    
+    <!-- カレンダーアイコン（小） -->
+    <g transform="translate(180, 260)">
+      <rect width="60" height="50" fill="#FF8C00" rx="4"/>
+      <rect y="10" width="60" height="40" fill="white"/>
+      <text x="30" y="38" font-family="Arial" font-size="24" font-weight="bold" text-anchor="middle" fill="#667eea">15</text>
+    </g>
+  </g>
+</svg>

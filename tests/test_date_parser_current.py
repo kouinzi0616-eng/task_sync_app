@@ -82,3 +82,9 @@ def test_two_parsers_disagree_on_recent_past_dates(frozen_now):
     cli = parse_due_expression("9/1まで", today=frozen_now.date())
     assert web.date().isoformat() == "2027-09-01"  # 過ぎていれば翌年
     assert cli.due_date.isoformat() == "2026-09-01"  # 約2か月前までは今年のまま
+
+
+def test_month_end_rollover_into_leap_year_keeps_28th(freeze_jst):
+    # 今の実装は「今年の月末 + 1年」なので、翌年がうるう年でも 2/28 になる（B26 で見直す候補）
+    freeze_jst(datetime(2027, 3, 1, 9, 0))
+    assert parse_date("資料作り (2月中)").date().isoformat() == "2028-02-28"

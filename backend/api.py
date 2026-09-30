@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 # 絶対インポート（プロジェクトルートから実行する場合）
 from backend.models import Category
-from backend.date_parser import parse_date
+from backend.date_parser import parse_deadline
 from backend.category_classifier import classify_category
 
 # ログ設定
@@ -68,6 +68,7 @@ class TaskResponse(BaseModel):
     deadline: str | None
     category: Category
     raw_text: str
+    warnings: List[str] = Field(default_factory=list, description="利用者に見せる注意（例: 存在しない日付）")
 
 
 class TaskListInput(BaseModel):
@@ -78,6 +79,22 @@ class TaskListInput(BaseModel):
 class SyncRequest(BaseModel):
     """Google Calendar同期リクエスト"""
     tasks: List[TaskResponse]
+
+
+# ============================================================
+# 解析の本体
+# ============================================================
+
+def _analyze(text: str) -> TaskResponse:
+    """1行を解析する（期限・題名・カテゴリ）"""
+    result = parse_deadline(text)
+    return TaskResponse(
+        title=result.title,
+        deadline=result.deadline.isoformat() if result.deadline else None,
+        category=classify_category(text),
+        raw_text=text,
+        warnings=list(result.warnings),
+    )
 
 
 # ============================================================
@@ -107,27 +124,10 @@ async def parse_task(task_input: TaskInput):
         解析済みタスク情報
     """
     try:
-        # 日付抽出
-        deadline = parse_date(task_input.text)
-        
-        # カテゴリ分類
-        category = classify_category(task_input.text)
-        
-        # タイトル抽出（日付表現を除去）
-        title = task_input.text
-        for pattern in ["(3/15まで)", "(5月中)", "(早め)", "(至急)", "(来週まで)"]:
-            title = title.replace(pattern, "")
-        title = title.strip()
-        
-        logger.info(f"タスク解析成功: {title} -> {category.value}")
-        
-        return TaskResponse(
-            title=title,
-            deadline=deadline.isoformat() if deadline else None,
-            category=category,
-            raw_text=task_input.text
-        )
-        
+        response = _analyze(task_input.text)
+        logger.info(f"タスク解析成功: {response.title} -> {response.category.value}")
+        return response
+
     except Exception as e:
         logger.error(f"タスク解析エラー: {e}")
         raise HTTPException(status_code=500, detail=f"タスク解析に失敗しました: {str(e)}") from e
@@ -152,21 +152,7 @@ async def parse_tasks_batch(task_list: TaskListInput):
             if not task_text.strip():
                 continue
                 
-            deadline = parse_date(task_text)
-            category = classify_category(task_text)
-            
-            # タイトル抽出
-            title = task_text
-            for pattern in ["(3/15まで)", "(5月中)", "(早め)", "(至急)", "(来週まで)"]:
-                title = title.replace(pattern, "")
-            title = title.strip()
-            
-            results.append(TaskResponse(
-                title=title,
-                deadline=deadline.isoformat() if deadline else None,
-                category=category,
-                raw_text=task_text
-            ))
+            results.append(_analyze(task_text))
         
         logger.info(f"一括解析完了: {len(results)}件のタスク")
         return results

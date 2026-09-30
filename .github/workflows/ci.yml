@@ -1,0 +1,56 @@
+# push と PR のたびに、構文確認・ruff・pytest（scripts/check.sh）と依存の脆弱性確認を回す。
+# 外部への送信やデプロイはしない（Render へのデプロイは main への反映で Render 側が行う）。
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: 依存を入れる（本番・開発・カレンダー）
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt -r requirements-calendar.txt
+      - name: 構文確認・ruff・pytest（tests/ と labs/）
+        run: bash scripts/check.sh
+        env:
+          PYTHON: python
+
+  audit:
+    name: pip-audit（失敗しても CI 全体は落とさない）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: pip-audit を入れる
+        run: python -m pip install pip-audit
+      - name: 固定した依存の既知の脆弱性を調べる
+        run: python -m pip_audit -r requirements.txt -r requirements-calendar.txt -r requirements-dev.txt

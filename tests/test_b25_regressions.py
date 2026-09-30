@@ -311,3 +311,15 @@ def test_api_docs_can_be_enabled_by_env():
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ["200", "200"]
+
+
+# ------------------------------------------------------------
+# 画面側: 行ごとの結果と注意を表示し、題名を HTML として解釈させない
+# ------------------------------------------------------------
+
+def test_frontend_handles_per_row_results(client):
+    html = client.get("/").text
+    assert "task.ok === false" in html
+    assert "task.warnings" in html
+    assert "title.textContent = task.title" in html
+    assert "${task.title}" not in html

@@ -214,6 +214,21 @@
             color: #666;
         }
         
+        /* 解析できなかった行と、注意（存在しない日付など） */
+        .task-item.task-failed {
+            border-left-color: #c62828;
+        }
+        
+        .task-note {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #b26a00;
+        }
+        
+        .task-failed .task-note {
+            color: #c62828;
+        }
+        
         .loading {
             display: none;
             text-align: center;
@@ -466,11 +481,18 @@
                     body: JSON.stringify({ tasks })
                 });
                 
+                if (response.status === 422) {
+                    throw new Error('入力が長すぎるか、行が多すぎます（1行500文字・200行まで）');
+                }
                 if (!response.ok) throw new Error('解析に失敗しました');
                 
                 parsedTasks = await response.json();
                 displayResults(parsedTasks);
-                showSuccess(`${parsedTasks.length}件のタスクを解析しました`);
+                const failedCount = parsedTasks.filter(t => t.ok === false).length;
+                const okCount = parsedTasks.length - failedCount;
+                showSuccess(failedCount
+                    ? `${okCount}件のタスクを解析しました（${failedCount}件は解析できませんでした）`
+                    : `${okCount}件のタスクを解析しました`);
                 
             } catch (err) {
                 showError('エラーが発生しました: ' + err.message);
@@ -487,6 +509,8 @@
             tasks.forEach(task => {
                 const item = document.createElement('div');
                 item.className = 'task-item';
+                const failed = task.ok === false;
+                if (failed) item.classList.add('task-failed');
                 
                 const categoryClass = {
                     '寺院関係': 'temple',
@@ -497,19 +521,39 @@
                 
                 const deadlineText = task.deadline 
                     ? new Date(task.deadline).toLocaleDateString('ja-JP', {
+                        timeZone: 'Asia/Tokyo',  // 期限は日本時間の日付
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric'
                     })
                     : '期限なし';
                 
-                item.innerHTML = `
-                    <div class="task-title">${task.title}</div>
-                    <div class="task-meta">
-                        <span class="badge badge-${categoryClass}">${task.category}</span>
-                        <span class="deadline">📅 ${deadlineText}</span>
-                    </div>
-                `;
+                // 入力された文字は textContent で入れる（HTML として解釈させない）
+                const title = document.createElement('div');
+                title.className = 'task-title';
+                title.textContent = task.title;
+                item.appendChild(title);
+                
+                if (!failed) {
+                    const meta = document.createElement('div');
+                    meta.className = 'task-meta';
+                    const badge = document.createElement('span');
+                    badge.className = `badge badge-${categoryClass}`;
+                    badge.textContent = task.category;
+                    const deadline = document.createElement('span');
+                    deadline.className = 'deadline';
+                    deadline.textContent = `📅 ${deadlineText}`;
+                    meta.append(badge, deadline);
+                    item.appendChild(meta);
+                }
+                
+                const notes = failed ? [task.error || '解析できませんでした'] : (task.warnings || []);
+                notes.forEach(text => {
+                    const note = document.createElement('div');
+                    note.className = 'task-note';
+                    note.textContent = `⚠ ${text}`;
+                    item.appendChild(note);
+                });
                 
                 taskList.appendChild(item);
             });

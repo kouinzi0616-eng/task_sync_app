@@ -5,7 +5,8 @@
 // バージョン: 1.0
 // ============================================================
 
-const CACHE_NAME = 'task-sync-v1';
+// 画面（index.html）を変えたら番号を上げる（古いキャッシュを捨てて新しい画面を取り直す）
+const CACHE_NAME = 'task-sync-v2';
 const urlsToCache = [
   '/',
   '/manifest.json',

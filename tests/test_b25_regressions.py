@@ -5,7 +5,12 @@
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
+import textwrap
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +19,7 @@ from backend.date_parser import JST, parse_date, parse_deadline
 from backend.models import Category
 
 NOW = datetime(2026, 10, 1, 10, 0, tzinfo=JST)
+ROOT = Path(__file__).resolve().parent.parent
 
 
 # ------------------------------------------------------------
@@ -238,3 +244,70 @@ def test_logs_have_counts_but_no_titles(client, frozen_now, monkeypatch, caplog)
     assert "内部の詳細" not in joined
     assert "タスク解析: 1件（警告 0件）" in messages
     assert "一括解析: 3件（成功 2件・失敗 1件・警告あり 1件）" in messages
+
+
+# ------------------------------------------------------------
+# (6) CORS を外す（画面と API は同じオリジン）
+# ------------------------------------------------------------
+
+def test_cors_preflight_from_other_site_gets_no_allow_headers(client):
+    response = client.options(
+        "/api/parse",
+        headers={
+            "Origin": "https://evil.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert "access-control-allow-origin" not in response.headers
+    assert "access-control-allow-credentials" not in response.headers
+
+
+def test_cors_simple_request_from_other_site_gets_no_allow_headers(client):
+    response = client.post(
+        "/api/parse",
+        json={"text": "メモ"},
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 200
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_same_origin_page_can_still_call_api(client):
+    # 画面は同じオリジンから配信され、そこから API を呼ぶ
+    assert client.get("/").status_code == 200
+    assert client.post("/api/parse-batch", json={"tasks": ["メモ"]}).status_code == 200
+
+
+# ------------------------------------------------------------
+# (7) /docs と /openapi.json は既定で無効。環境変数で有効にできる
+# ------------------------------------------------------------
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
+def test_api_docs_are_404_by_default(client, path):
+    assert client.get(path).status_code == 404
+
+
+def test_api_docs_can_be_enabled_by_env():
+    code = textwrap.dedent(
+        """
+        import warnings
+        warnings.simplefilter("ignore")
+        from fastapi.testclient import TestClient
+        from backend.api import app
+
+        with TestClient(app) as client:
+            print(client.get("/docs").status_code, client.get("/openapi.json").status_code)
+        """
+    )
+    env = {**os.environ, "PYTHONPATH": str(ROOT), "ENABLE_API_DOCS": "1"}
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["200", "200"]

@@ -14,12 +14,12 @@ FastAPI バックエンド - タスク同期API
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from typing import Annotated, List
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -36,21 +36,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def _env_flag(name: str) -> bool:
+    """環境変数が 1 / true / yes / on なら True"""
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+# API の説明ページ（/docs・/redoc・/openapi.json）は既定で無効。
+# 手元で見たいときだけ ENABLE_API_DOCS=1 を付けて起動する。
+API_DOCS_ENABLED = _env_flag("ENABLE_API_DOCS")
+
 # FastAPIアプリ
 app = FastAPI(
     title="Task Sync API",
     description="タスク同期・カテゴリ分類・カレンダー連携API",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs" if API_DOCS_ENABLED else None,
+    redoc_url="/redoc" if API_DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if API_DOCS_ENABLED else None,
 )
 
-# CORS設定（PWAからのアクセスを許可）
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 本番環境では特定のオリジンに限定すること
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS は設定しない。画面（frontend/）と API は同じオリジンから配信しているので不要で、
+# 他のサイトから資格情報つきで呼べる状態を作らないため。
 
 
 # ============================================================

@@ -91,6 +91,9 @@ Python の版は、リポジトリの `.python-version`（中身は `3.12`）で
 
 参考: https://render.com/docs/python-version
 
+アプリが読む環境変数は `.env.example` にまとめています。
+API の説明ページ（`/docs`）は既定で出さないので、公開サービスでは `ENABLE_API_DOCS` を設定しないでください。
+
 ### 2-5. デプロイ開始
 
 1. 「Create Web Service」をクリック

@@ -8,12 +8,16 @@
 """
 from __future__ import annotations
 
+import os
 import warnings
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
+
+# 手元の環境変数で結果が変わらないよう、アプリが読む変数を消してから backend.api を読む
+os.environ.pop("ENABLE_API_DOCS", None)
 
 ROOT = Path(__file__).resolve().parent.parent
 JST = ZoneInfo("Asia/Tokyo")

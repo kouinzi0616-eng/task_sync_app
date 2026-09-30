@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # 絶対インポート（プロジェクトルートから実行する場合）
-from backend.models import Task, Category
+from backend.models import Category
 from backend.date_parser import parse_date
 from backend.category_classifier import classify_category
 
@@ -130,7 +130,7 @@ async def parse_task(task_input: TaskInput):
         
     except Exception as e:
         logger.error(f"タスク解析エラー: {e}")
-        raise HTTPException(status_code=500, detail=f"タスク解析に失敗しました: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"タスク解析に失敗しました: {str(e)}") from e
 
 
 @app.post("/api/parse-batch", response_model=List[TaskResponse])
@@ -173,7 +173,7 @@ async def parse_tasks_batch(task_list: TaskListInput):
         
     except Exception as e:
         logger.error(f"一括解析エラー: {e}")
-        raise HTTPException(status_code=500, detail=f"一括解析に失敗しました: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"一括解析に失敗しました: {str(e)}") from e
 
 
 @app.post("/api/sync-calendar")
@@ -203,11 +203,12 @@ async def sync_to_calendar(sync_request: SyncRequest):
 # 静的ファイル配信（PWA）- 修正版
 # ============================================================
 
-frontend_dir = Path("frontend")
+# 起動したフォルダに関係なく見つかるよう、このファイルの位置を基準にする
+frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 
 if frontend_dir.exists() and frontend_dir.is_dir():
     # 静的ファイルを /static にマウント（CSS, JS, 画像など）
-    app.mount("/static", StaticFiles(directory="frontend"), name="static")
+    app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
     
     # ルートパスでindex.htmlを返す
     @app.get("/", response_class=HTMLResponse)

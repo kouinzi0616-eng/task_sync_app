@@ -14,7 +14,6 @@ sync.py — 同期オーケストレーター
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from .calendar_client import GoogleCalendarClient
 from .models import SyncAction, SyncResult, Task

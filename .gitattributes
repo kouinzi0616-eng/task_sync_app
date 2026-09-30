@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# シェルスクリプトは Windows で取り出しても LF のままにする（bash で動かすため）
+*.sh text eol=lf

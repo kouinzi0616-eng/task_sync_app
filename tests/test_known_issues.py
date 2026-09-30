@@ -2,12 +2,6 @@
 from __future__ import annotations
 
 
-def test_empty_text_is_accepted(client):
-    response = client.post("/api/parse", json={"text": ""})
-    assert response.status_code == 200
-    assert response.json()["title"] == ""
-
-
 def test_cors_allows_any_origin_with_credentials(client):
     response = client.options(
         "/api/parse",

@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import List
+from typing import Annotated, List
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # 絶対インポート（プロジェクトルートから実行する場合）
 from backend.models import Category
@@ -54,12 +54,39 @@ app.add_middleware(
 
 
 # ============================================================
+# 入力の上限と、利用者に返す汎用の文言
+# ============================================================
+
+MAX_TEXT_LENGTH = 500  # 1タスク（1行）の最大文字数
+MAX_BATCH_TASKS = 200  # 一括解析・同期の最大件数
+
+# 500 の応答や失敗した行には内部の例外文を載せず、この文言だけを返す
+PARSE_ERROR_MESSAGE = "タスク解析に失敗しました"
+ROW_ERROR_MESSAGE = "この行は解析できませんでした"
+
+
+# ============================================================
 # リクエスト・レスポンスモデル
 # ============================================================
 
+TaskText = Annotated[str, Field(max_length=MAX_TEXT_LENGTH)]
+
+
 class TaskInput(BaseModel):
     """タスク入力（生テキスト）"""
-    text: str = Field(..., description="タスクテキスト（例: 青鳳会の会議資料準備 (3/15まで)）")
+    text: str = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_TEXT_LENGTH,
+        description="タスクテキスト（例: 青鳳会の会議資料準備 (3/15まで)）",
+    )
+
+    @field_validator("text")
+    @classmethod
+    def _reject_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("空白だけのタスクは解析できません")
+        return value
 
 
 class TaskResponse(BaseModel):
@@ -71,14 +98,29 @@ class TaskResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list, description="利用者に見せる注意（例: 存在しない日付）")
 
 
+class BatchItemResponse(BaseModel):
+    """一括解析の1行分の結果（ok=False の行は error に理由の文言が入る）"""
+    ok: bool
+    title: str
+    deadline: str | None = None
+    category: Category | None = None
+    raw_text: str
+    warnings: List[str] = Field(default_factory=list)
+    error: str | None = None
+
+
 class TaskListInput(BaseModel):
-    """複数タスク一括入力"""
-    tasks: List[str] = Field(..., description="タスクテキストのリスト")
+    """複数タスク一括入力（空白だけの行は読み飛ばす）"""
+    tasks: List[TaskText] = Field(
+        ...,
+        max_length=MAX_BATCH_TASKS,
+        description=f"タスクテキストのリスト（{MAX_BATCH_TASKS}件・1行{MAX_TEXT_LENGTH}文字まで）",
+    )
 
 
 class SyncRequest(BaseModel):
     """Google Calendar同期リクエスト"""
-    tasks: List[TaskResponse]
+    tasks: List[TaskResponse] = Field(..., max_length=MAX_BATCH_TASKS)
 
 
 # ============================================================
@@ -125,41 +167,57 @@ async def parse_task(task_input: TaskInput):
     """
     try:
         response = _analyze(task_input.text)
-        logger.info(f"タスク解析成功: {response.title} -> {response.category.value}")
-        return response
-
     except Exception as e:
-        logger.error(f"タスク解析エラー: {e}")
-        raise HTTPException(status_code=500, detail=f"タスク解析に失敗しました: {str(e)}") from e
+        # ログにも応答にも、題名や内部の例外文は出さない
+        logger.error("タスク解析エラー: 1件（%s）", type(e).__name__)
+        raise HTTPException(status_code=500, detail=PARSE_ERROR_MESSAGE) from None
+
+    logger.info("タスク解析: 1件（警告 %d件）", len(response.warnings))
+    return response
 
 
-@app.post("/api/parse-batch", response_model=List[TaskResponse])
+@app.post("/api/parse-batch", response_model=List[BatchItemResponse])
 async def parse_tasks_batch(task_list: TaskListInput):
     """
-    複数タスクを一括解析
+    複数タスクを一括解析（行ごとに成否を返す。1行の失敗で全体を失敗にしない）
     
     Args:
         task_list: タスクテキストのリスト
         
     Returns:
-        解析済みタスクのリスト
+        行ごとの解析結果のリスト（空白だけの行は含めない）
     """
-    try:
-        results = []
-        
-        for task_text in task_list.tasks:
-            # 空行はスキップ
-            if not task_text.strip():
-                continue
-                
-            results.append(_analyze(task_text))
-        
-        logger.info(f"一括解析完了: {len(results)}件のタスク")
-        return results
-        
-    except Exception as e:
-        logger.error(f"一括解析エラー: {e}")
-        raise HTTPException(status_code=500, detail=f"一括解析に失敗しました: {str(e)}") from e
+    results: List[BatchItemResponse] = []
+    failed = 0
+    warned = 0
+
+    for task_text in task_list.tasks:
+        # 空行はスキップ
+        if not task_text.strip():
+            continue
+
+        try:
+            parsed = _analyze(task_text)
+        except Exception as e:
+            failed += 1
+            logger.error("一括解析: 1行失敗（%s）", type(e).__name__)
+            results.append(BatchItemResponse(
+                ok=False,
+                title=task_text.strip(),
+                raw_text=task_text,
+                error=ROW_ERROR_MESSAGE,
+            ))
+            continue
+
+        if parsed.warnings:
+            warned += 1
+        results.append(BatchItemResponse(ok=True, **parsed.model_dump()))
+
+    logger.info(
+        "一括解析: %d件（成功 %d件・失敗 %d件・警告あり %d件）",
+        len(results), len(results) - failed, failed, warned,
+    )
+    return results
 
 
 @app.post("/api/sync-calendar")

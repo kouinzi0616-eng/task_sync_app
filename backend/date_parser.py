@@ -8,7 +8,7 @@
 作成日: 2026-02-16
 バージョン: 1.0
 動作環境: Python 3.10+
-必要ライブラリ: python-dateutil, pytz
+必要ライブラリ: python-dateutil
 ============================================================
 """
 from __future__ import annotations
@@ -16,12 +16,12 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
-import pytz
 from dateutil.relativedelta import relativedelta
 
-# 日本時間のタイムゾーン
-JST = pytz.timezone('Asia/Tokyo')
+# 日本時間のタイムゾーン（Windows では tzdata パッケージから読む）
+JST = ZoneInfo('Asia/Tokyo')
 
 
 def parse_date(text: str) -> Optional[datetime]:

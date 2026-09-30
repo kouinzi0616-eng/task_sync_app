@@ -1,0 +1,15 @@
+# ============================================================
+# Google カレンダー連携（backend/task_sync/calendar_client.py）用の依存
+# ============================================================
+# Web アプリ（backend/api.py）は使わないので、本番の requirements.txt には入れない。
+# 使うときだけ入れる:
+#   pip install -r requirements.txt -r requirements-calendar.txt
+# 作り直し:
+#   uv pip compile requirements-calendar.in -o requirements-calendar.txt --universal --python-version 3.11
+# ============================================================
+-c requirements.txt
+
+google-auth>=2.27.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+google-api-python-client>=2.116.0

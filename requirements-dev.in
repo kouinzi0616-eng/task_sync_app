@@ -1,0 +1,13 @@
+# ============================================================
+# 開発・テスト用の依存（本番には入れない）
+# ============================================================
+#   pip install -r requirements.txt -r requirements-dev.txt
+# 作り直し:
+#   uv pip compile requirements-dev.in -o requirements-dev.txt --universal --python-version 3.11
+# ============================================================
+-c requirements.txt
+
+pytest
+# FastAPI（Starlette）の TestClient が使う HTTP クライアント
+httpx2
+ruff

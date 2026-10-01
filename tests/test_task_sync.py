@@ -13,7 +13,7 @@ from datetime import date
 import pytest
 
 from backend.task_sync.date_rules import extract_due_part, parse_due_expression
-from backend.task_sync.models import DueType, TaskCategory
+from backend.task_sync.models import DueType
 from backend.task_sync.normalizer import classify_category
 from backend.task_sync.parser import parse_line, parse_tasks, parse_text
 
@@ -85,12 +85,13 @@ def test_extract_due_part(line, expected):
     assert extract_due_part(line) == expected
 
 
-def test_parse_line_strips_bullet_and_due_part():
+def test_parse_line_strips_bullet_and_due_part(reallike_categories):
     task = parse_line("・ 法要の準備（3/15まで）", today=TODAY)
     assert task is not None
     assert task.source_text == "・ 法要の準備（3/15まで）"
     assert task.title == "法要の準備"
-    assert task.category == TaskCategory.TEMPLE
+    assert task.category == reallike_categories.names[0]  # 架空の設定の「お寺の用事」（B27 の前の TEMPLE）
+    assert task.category_hits == ["法要"]
     assert task.due_date == date(2027, 3, 15)
     assert task.due_type == DueType.EXACT
     assert task.due_raw == "3/15まで"
@@ -147,22 +148,32 @@ def test_parse_text_logs_counts_but_not_line_text(caplog):
 
 
 @pytest.mark.parametrize(
-    ("text", "expected"),
+    ("text", "index"),
     [
-        ("寺の掃除", TaskCategory.TEMPLE),
-        ("会報の発送", TaskCategory.SEIHOUKAI),
-        ("和讃の練習", TaskCategory.EIDOUBU),
-        ("買い物", TaskCategory.PERSONAL),
+        # B27: 判定は画面・API と同じ categories.classify。架空の設定のカテゴリの番号（設定の順）で書く
+        ("寺の掃除", 0),
+        ("会報の発送", 1),
+        ("和讃の練習", 2),
+        ("買い物", 3),
+        ("寺田さんに電話", 3),  # B27 の前は「寺」の部分一致で 0 になっていた
+        ("共同声明の確認", 3),  # B27 の前は「声明」の部分一致で 2 になっていた
     ],
 )
-def test_classify_category(text, expected):
-    assert classify_category(text) == expected
+def test_classify_category(reallike_categories, text, index):
+    assert classify_category(text) == reallike_categories.names[index]
 
 
-def test_description_text_contains_source_and_due():
+def test_classify_category_with_sample_config():
+    assert classify_category("英語の練習") == "学び"
+    assert classify_category("寺の掃除") == "暮らし"
+
+
+def test_description_text_contains_source_and_due(reallike_categories):
     task = parse_line("法要の準備 (3/15まで)", today=TODAY)
     lines = task.description_text.splitlines()
     assert lines[0] == "【原文】法要の準備 (3/15まで)"
+    assert lines[1] == f"【カテゴリ】{reallike_categories.names[0]}"
+    assert lines[2] == "【カテゴリの理由】法要"
     assert lines[-1] == "【期限原文】3/15まで"
 
 
@@ -194,4 +205,4 @@ def test_calendar_event_body_is_all_day_event():
     assert body["start"] == {"date": "2027-03-15"}
     assert body["end"] == {"date": "2027-03-16"}
     assert body["extendedProperties"]["private"]["task_id"] == task.task_id
-    assert body["summary"] == f"[{TaskCategory.TEMPLE.value}] 法要の準備"
+    assert body["summary"] == f"[{task.category}] 法要の準備"

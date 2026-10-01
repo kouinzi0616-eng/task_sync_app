@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 import backend.api as api
+from backend.task_sync.categories import CategoryMatch
 
 NEW_FIELDS = ("due_type", "due_raw", "due_time", "needs_review", "overdue")
 
@@ -82,9 +83,9 @@ def test_batch_rows_have_new_fields_and_failed_rows_need_review(client, frozen_n
     def classify_or_fail(text):
         if "失敗させる行" in text:
             raise RuntimeError("内部の詳細-0000")
-        return api.Category.PERSONAL
+        return CategoryMatch(category="暮らし", color=4)
 
-    monkeypatch.setattr(api, "classify_category", classify_or_fail)
+    monkeypatch.setattr(api, "classify", classify_or_fail)
     response = client.post(
         "/api/parse-batch",
         json={"tasks": ["書類の提出 (至急)", "失敗させる行 (3/15まで)", "書類 (2/30まで)"]},
@@ -102,7 +103,7 @@ def test_batch_rows_have_new_fields_and_failed_rows_need_review(client, frozen_n
 def test_sync_calendar_answers_501_for_any_old_request(client):
     # B30 でサーバーのカレンダー同期をやめた。古い形で送っても、本文を読まずに 501 を返す
     old_shape = {
-        "title": "書類", "deadline": None, "category": api.Category.PERSONAL.value,
+        "title": "書類", "deadline": None, "category": "暮らし",
         "raw_text": "書類", "warnings": [],
     }
     response = client.post("/api/sync-calendar", json={"tasks": [old_shape]})

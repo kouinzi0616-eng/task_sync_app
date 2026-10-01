@@ -11,17 +11,10 @@
 必要ライブラリ: pydantic
 ============================================================
 """
-from __future__ import annotations
-
-from enum import Enum
 
 # 履歴保存（backend/database.py）だけが使っていた Task モデルは、B29 で database.py と一緒に削除した。
 # タスクは画面（frontend/）が端末の中（IndexedDB）に保存する。方針は docs/storage.md。
 
-
-class Category(str, Enum):
-    """タスクカテゴリ"""
-    TEMPLE = "寺院関係"
-    SEIHOUKAI = "青鳳会"
-    EIDOUBU = "詠道部"
-    PERSONAL = "個人"
+# カテゴリの列挙（Category）は B27 で削除した。カテゴリ名と判定語はコードに書かず、
+# 設定（JSON）から読む。判定の正本は backend/task_sync/categories.py、
+# 書き方は README の「カテゴリの設定」を見る。

@@ -149,9 +149,9 @@ def test_uid_does_not_change_when_the_deadline_changes():
 def test_old_task_id_changes_when_the_deadline_changes():
     """前のカレンダー同期（calendar_client.py）の task_id は、カテゴリ・題名・期限日のハッシュ。
     期限を直すと別の値になり、前の予定が見つからずに二重に登録される（README の説明の裏づけ）"""
-    from backend.task_sync.models import Task, TaskCategory
+    from backend.task_sync.models import Task
 
-    base = {"source_text": "架空の資料作り (10/15まで)", "title": "架空の資料作り", "category": TaskCategory.PERSONAL}
+    base = {"source_text": "架空の資料作り (10/15まで)", "title": "架空の資料作り", "category": "暮らし"}
     first = Task(due_date=date(2026, 10, 15), **base).task_id
     moved = Task(due_date=date(2026, 11, 30), **base).task_id
     renamed = Task(due_date=date(2026, 10, 15), **{**base, "title": "架空の資料作り（改訂）"}).task_id

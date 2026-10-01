@@ -185,7 +185,7 @@ class GoogleCalendarClient:
         # 終日イベント: start.date = due_date, end.date = due_date + 1日
         end_date = task.due_date + timedelta(days=1)
         return {
-            "summary": f"[{task.category.value}] {task.title}",
+            "summary": f"[{task.category}] {task.title}",
             "description": task.description_text,
             "start": {"date": task.due_date.isoformat()},
             "end": {"date": end_date.isoformat()},

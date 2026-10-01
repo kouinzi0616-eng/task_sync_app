@@ -21,7 +21,7 @@ from typing import Optional
 
 from .date_rules import NO_DEADLINE_OFFSET_DAYS, parse_due_in_line
 from .models import Task
-from .normalizer import classify_category
+from .categories import classify
 
 logger = logging.getLogger("task_sync")
 
@@ -112,19 +112,20 @@ def parse_line(
     # タイトル正規化（余分な空白を1つに）
     title = re.sub(r"\s+", " ", due.title)
 
-    # カテゴリ判定
-    category = classify_category(title)
+    # カテゴリ判定（正本は categories.py。判定語は設定から読む）
+    match = classify(title)
 
-    # 題名などの行の文字はログに出さない（件数と種類だけ）
+    # 題名・カテゴリ名などの行の文字はログに出さない（件数と種類だけ）
     logger.debug(
-        "パース結果: category=%s, due=%s (%s), needs_review=%s",
-        category.value, due_date, due.due_type.value, due.needs_review,
+        "パース結果: category_hits=%d, due=%s (%s), needs_review=%s",
+        len(match.hits), due_date, due.due_type.value, due.needs_review,
     )
 
     return Task(
         source_text=source_text,
         title=title,
-        category=category,
+        category=match.category,
+        category_hits=list(match.hits),
         due_date=due_date,
         due_type=due.due_type,
         due_raw=due.due_raw,

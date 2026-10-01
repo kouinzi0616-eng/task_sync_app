@@ -22,16 +22,8 @@ from typing import Optional
 from pydantic import BaseModel, Field, computed_field
 
 
-# ═══════════════════════════════════════════════════════════════
-# カテゴリ列挙型
-# ═══════════════════════════════════════════════════════════════
-
-class TaskCategory(str, Enum):
-    """タスクのカテゴリ（Googleカレンダー上のカレンダー名に対応）"""
-    TEMPLE = "寺院関係"
-    SEIHOUKAI = "青鳳会"
-    EIDOUBU = "詠道部"
-    PERSONAL = "個人"
+# カテゴリは B27 で設定（JSON）から決めるようにした。名前の一覧はコードに書かない。
+# 判定の正本は categories.py（設定の読み先と見本は README の「カテゴリの設定」）。
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -64,7 +56,8 @@ class Task(BaseModel):
 
     source_text: str = Field(..., description="パース元の原文1行")
     title: str = Field(..., description="正規化後のタスク名")
-    category: TaskCategory = Field(..., description="自動判定カテゴリ")
+    category: str = Field(..., description="自動判定カテゴリ（設定にあるカテゴリ名）")
+    category_hits: list[str] = Field(default_factory=list, description="カテゴリの判定で当たった語（空なら既定のカテゴリ）")
     due_date: date = Field(..., description="算出した期限日")
     due_type: DueType = Field(DueType.NONE, description="期限表現の種類")
     due_raw: str = Field("", description="期限部分の原文（括弧内テキスト）")
@@ -75,7 +68,7 @@ class Task(BaseModel):
     @property
     def task_id(self) -> str:
         """カテゴリ＋正規化タイトル＋期限日から安定ハッシュを生成"""
-        seed = f"{self.category.value}|{self.title}|{self.due_date.isoformat()}"
+        seed = f"{self.category}|{self.title}|{self.due_date.isoformat()}"
         return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
 
     @property
@@ -83,9 +76,11 @@ class Task(BaseModel):
         """Googleカレンダーの description に書き込む内容"""
         lines = [
             f"【原文】{self.source_text}",
-            f"【カテゴリ】{self.category.value}",
+            f"【カテゴリ】{self.category}",
             f"【期限種別】{self.due_type.value}",
         ]
+        if self.category_hits:
+            lines.insert(2, f"【カテゴリの理由】{'・'.join(self.category_hits)}")
         if self.due_raw:
             lines.append(f"【期限原文】{self.due_raw}")
         for warning in self.warnings:

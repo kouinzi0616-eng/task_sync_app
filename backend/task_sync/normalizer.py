@@ -11,37 +11,24 @@ normalizer.py — カテゴリ自動判定
 ============================================================
 """
 
+# ------------------------------------------------------------
+# B27（2026-10）: 薄い互換層
+# ------------------------------------------------------------
+# 判定の正本は categories.py。判定語とカテゴリ名はコードに書かず、設定（JSON）から読む。
+# 前は、ここ（カレンダー同期用）と backend/category_classifier.py（画面・API 用）に
+# 別々の判定語と決め方があった。今はどちらも categories.classify を使う。
+# ------------------------------------------------------------
+
 from __future__ import annotations
 
-from .models import TaskCategory
+from .categories import CategoryMatch, classify
 
-# ═══════════════════════════════════════════════════════════════
-# カテゴリ判定キーワード辞書
-# ═══════════════════════════════════════════════════════════════
-# 優先度の高い順に評価する。最初にマッチしたカテゴリを採用。
-# settings.yaml でオーバーライドする拡張も可能だが、
-# v1.0 ではハードコードで十分。
-
-CATEGORY_KEYWORDS: list[tuple[TaskCategory, list[str]]] = [
-    (TaskCategory.SEIHOUKAI, [
-        "青鳳会", "せいほうかい", "青鳳", "会報", "役員会",
-    ]),
-    (TaskCategory.EIDOUBU, [
-        "詠道部", "えいどうぶ", "詠道", "和讃", "声明", "御詠歌",
-    ]),
-    (TaskCategory.TEMPLE, [
-        "寺", "法要", "檀家", "御朱印", "本堂", "仏具",
-        "お盆", "彼岸", "施餓鬼", "墓参", "永代",
-        "住職", "副住職", "庫裏", "山門", "鐘楼",
-        "法話", "護持会", "総代", "門信徒",
-    ]),
-    # 上記いずれにもマッチしなければ「個人」
-]
+__all__ = ["CategoryMatch", "classify", "classify_category"]
 
 
-def classify_category(text: str) -> TaskCategory:
+def classify_category(text: str) -> str:
     """
-    テキスト本文からカテゴリを判定する。
+    テキスト本文からカテゴリ名を判定する（当たった語も要るときは classify を使う）。
 
     Parameters
     ----------
@@ -50,10 +37,7 @@ def classify_category(text: str) -> TaskCategory:
 
     Returns
     -------
-    TaskCategory
+    str
+        設定にあるカテゴリ名
     """
-    for category, keywords in CATEGORY_KEYWORDS:
-        for keyword in keywords:
-            if keyword in text:
-                return category
-    return TaskCategory.PERSONAL
+    return classify(text).category

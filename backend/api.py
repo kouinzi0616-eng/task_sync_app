@@ -26,9 +26,9 @@ from pydantic import BaseModel, Field, field_validator
 from starlette.datastructures import MutableHeaders
 
 # 絶対インポート（プロジェクトルートから実行する場合）
-from backend.models import Category
 from backend.date_parser import parse_deadline
-from backend.category_classifier import classify_category
+from backend.category_classifier import classify
+from backend.task_sync.categories import config_status
 
 # ログ設定
 logging.basicConfig(
@@ -56,6 +56,10 @@ app = FastAPI(
     redoc_url="/redoc" if API_DOCS_ENABLED else None,
     openapi_url="/openapi.json" if API_DOCS_ENABLED else None,
 )
+
+# カテゴリの設定（B27）は起動のときに読む。読めなければ見本に戻し、理由をログに出す（中身は出さない）
+_category_status = config_status()
+logger.info("カテゴリの設定: %s（%d 個）", _category_status.source, _category_status.categories)
 
 # CORS は設定しない。画面（frontend/）と API は同じオリジンから配信しているので不要で、
 # 他のサイトから資格情報つきで呼べる状態を作らないため。
@@ -154,7 +158,7 @@ class TaskInput(BaseModel):
         ...,
         min_length=1,
         max_length=MAX_TEXT_LENGTH,
-        description="タスクテキスト（例: 青鳳会の会議資料準備 (3/15まで)）",
+        description="タスクテキスト（例: 会議資料の準備 (3/15まで)）",
     )
 
     @field_validator("text")
@@ -169,7 +173,7 @@ class TaskResponse(BaseModel):
     """解析済みタスク"""
     title: str
     deadline: str | None
-    category: Category
+    category: str = Field(..., description="カテゴリ名（設定 CATEGORY_CONFIG_JSON などで決める。README の「カテゴリの設定」）")
     raw_text: str
     warnings: List[str] = Field(default_factory=list, description="利用者に見せる注意（例: 存在しない日付）")
     # B26: どの表現をどう読んだか（項目を足しただけ。上の5項目の意味は変えない）
@@ -178,6 +182,9 @@ class TaskResponse(BaseModel):
     due_time: str | None = Field(None, description="時刻 HH:MM（書いてあれば）。deadline は日付の 0:00 のまま")
     needs_review: bool = Field(False, description="人が確かめるべき行か（warnings が1つでもあれば True）")
     overdue: bool = Field(False, description="期限を過ぎているか")
+    # B27: カテゴリの判定の理由と、画面の印の色
+    category_hits: List[str] = Field(default_factory=list, description="カテゴリの判定で当たった語（空なら既定のカテゴリ）")
+    category_color: int = Field(1, description="カテゴリの印の色の番号（1〜6。画面の .badge-cat-N）")
 
 
 class BatchItemResponse(BaseModel):
@@ -185,7 +192,7 @@ class BatchItemResponse(BaseModel):
     ok: bool
     title: str
     deadline: str | None = None
-    category: Category | None = None
+    category: str | None = None
     raw_text: str
     warnings: List[str] = Field(default_factory=list)
     error: str | None = None
@@ -194,6 +201,8 @@ class BatchItemResponse(BaseModel):
     due_time: str | None = None
     needs_review: bool = False  # 解析できなかった行（ok=False）は True
     overdue: bool = False
+    category_hits: List[str] = Field(default_factory=list)
+    category_color: int | None = None  # 解析できなかった行（ok=False）は None
 
 
 class TaskListInput(BaseModel):
@@ -212,10 +221,13 @@ class TaskListInput(BaseModel):
 def _analyze(text: str) -> TaskResponse:
     """1行を解析する（期限・題名・カテゴリ）"""
     result = parse_deadline(text)
+    category = classify(text)
     return TaskResponse(
         title=result.title,
         deadline=result.deadline.isoformat() if result.deadline else None,
-        category=classify_category(text),
+        category=category.category,
+        category_hits=list(category.hits),
+        category_color=category.color,
         raw_text=text,
         warnings=list(result.warnings),
         due_type=result.due_type,
@@ -237,7 +249,9 @@ async def health_check():
         "status": "ok",
         "service": "Task Sync API",
         "version": "1.0.0",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        # B27: どのカテゴリの設定を使っているか（env・file・local・sample）。カテゴリ名や語は出さない
+        "category_config": config_status().as_dict(),
     }
 
 

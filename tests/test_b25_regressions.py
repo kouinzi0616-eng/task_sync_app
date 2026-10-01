@@ -16,7 +16,7 @@ import pytest
 
 import backend.api as api
 from backend.date_parser import JST, parse_date, parse_deadline
-from backend.models import Category
+from backend.task_sync.categories import CategoryMatch
 
 NOW = datetime(2026, 10, 1, 10, 0, tzinfo=JST)
 ROOT = Path(__file__).resolve().parent.parent
@@ -123,11 +123,11 @@ def test_api_nonexistent_date_is_200_with_warning(client, frozen_now):
     assert body["warnings"] and "存在しない日付" in body["warnings"][0]
 
 
-def test_api_full_width_parentheses(client, frozen_now):
+def test_api_full_width_parentheses(client, frozen_now, reallike_categories):
     body = client.post("/api/parse", json={"text": "法要の準備（3/15まで）"}).json()
     assert body["title"] == "法要の準備"
     assert body["deadline"] == "2027-03-15T00:00:00+09:00"
-    assert body["category"] == Category.TEMPLE.value
+    assert body["category"] == reallike_categories.names[0]  # 架空の設定の「お寺の用事」（B27 の前の TEMPLE）
     assert body["warnings"] == []
 
 
@@ -167,11 +167,11 @@ def test_api_batch_with_valid_and_invalid_lines_is_200(client, frozen_now):
 def _classify_or_fail(text):
     if "失敗させる行" in text:
         raise RuntimeError("内部の詳細-0000")
-    return Category.PERSONAL
+    return CategoryMatch(category="暮らし", color=4)
 
 
 def test_api_batch_reports_failure_per_row(client, frozen_now, monkeypatch):
-    monkeypatch.setattr(api, "classify_category", _classify_or_fail)
+    monkeypatch.setattr(api, "classify", _classify_or_fail)
     response = client.post(
         "/api/parse-batch",
         json={"tasks": ["資料A (3/15まで)", "失敗させる行 (3/15まで)", "資料B (2/30まで)"]},
@@ -238,7 +238,7 @@ def test_api_parse_500_hides_internal_error(client, monkeypatch):
 
 
 def test_logs_have_counts_but_no_titles(client, frozen_now, monkeypatch, caplog):
-    monkeypatch.setattr(api, "classify_category", _classify_or_fail)
+    monkeypatch.setattr(api, "classify", _classify_or_fail)
     caplog.set_level(logging.INFO, logger="backend.api")
 
     client.post("/api/parse", json={"text": "架空の題名その一 (3/15まで)"})

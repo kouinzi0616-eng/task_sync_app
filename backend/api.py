@@ -103,6 +103,12 @@ class TaskResponse(BaseModel):
     category: Category
     raw_text: str
     warnings: List[str] = Field(default_factory=list, description="利用者に見せる注意（例: 存在しない日付）")
+    # B26: どの表現をどう読んだか（項目を足しただけ。上の5項目の意味は変えない）
+    due_type: str = Field("none", description="期限の種類（exact・month_end・week・relative・urgent・soon・after・period・unknown・none）")
+    due_raw: str = Field("", description="期限として読み取った括弧の中身（例: 3/15まで）")
+    due_time: str | None = Field(None, description="時刻 HH:MM（書いてあれば）。deadline は日付の 0:00 のまま")
+    needs_review: bool = Field(False, description="人が確かめるべき行か（warnings が1つでもあれば True）")
+    overdue: bool = Field(False, description="期限を過ぎているか")
 
 
 class BatchItemResponse(BaseModel):
@@ -114,6 +120,11 @@ class BatchItemResponse(BaseModel):
     raw_text: str
     warnings: List[str] = Field(default_factory=list)
     error: str | None = None
+    due_type: str | None = None  # 解析できなかった行（ok=False）は None
+    due_raw: str = ""
+    due_time: str | None = None
+    needs_review: bool = False  # 解析できなかった行（ok=False）は True
+    overdue: bool = False
 
 
 class TaskListInput(BaseModel):
@@ -143,6 +154,11 @@ def _analyze(text: str) -> TaskResponse:
         category=classify_category(text),
         raw_text=text,
         warnings=list(result.warnings),
+        due_type=result.due_type,
+        due_raw=result.due_raw,
+        due_time=result.due_time,
+        needs_review=result.needs_review,
+        overdue=result.overdue,
     )
 
 
@@ -213,6 +229,7 @@ async def parse_tasks_batch(task_list: TaskListInput):
                 title=task_text.strip(),
                 raw_text=task_text,
                 error=ROW_ERROR_MESSAGE,
+                needs_review=True,
             ))
             continue
 

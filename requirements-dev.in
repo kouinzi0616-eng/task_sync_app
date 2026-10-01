@@ -11,3 +11,5 @@ pytest
 # FastAPI（Starlette）の TestClient が使う HTTP クライアント
 httpx2
 ruff
+# 画面が作るカレンダー用ファイル（.ics）を、別の実装で読めるか確かめる（tests/test_b30_ics.py）
+icalendar

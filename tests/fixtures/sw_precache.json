@@ -1,15 +1,16 @@
 {
-  "cache_version": 5,
+  "cache_version": 6,
   "files": {
-    "/": "3ad8ccec081d1bc5d70a2492461f2200fdea36cca16373301c5894a92f566f23",
-    "/app.css": "1e6f06caad7b6a866b74dd00e3bd2406cc697ce418ecbb0222be7a112820174a",
-    "/app.js": "99928af2ccf92875c7dcd521f4a7d7c4ec2cad13cb74f3fb268e70b77fcf04fa",
+    "/": "3466e268a649cc291f863c614420bfe4d3c89bb3804591e8e007dbcb705a4f4c",
+    "/app.css": "5bf8dc78f8d6afe85ad0fbe2c390873f655c243ec31d2936c98f4c46ddb0a9c9",
+    "/app.js": "65a74d34c49fbb6e62aee4f96540a968140905e2e2d0c4db05f883636e672beb",
     "/icon-192.png": "33e2e0b2f061c3251909a03a4988a08e26aa65101beb58b15ddc006bf555b7a1",
     "/icon-512.png": "0d159f3e0fb397496d7aab0cf2a8fd3a9583876f1b15f88b0cfac030079358c3",
     "/icon-maskable-192.png": "15cdb29aa632f12af8440d766e073e8a774cf89311199aa5ef6baeb42af7eb03",
     "/icon-maskable-512.png": "85e2fc5de45d40c4876dbe8c75472ca48df24d19cb554c6758c3913e2d53cc93",
-    "/index.html": "3ad8ccec081d1bc5d70a2492461f2200fdea36cca16373301c5894a92f566f23",
-    "/manifest.json": "3b5792516348e9bf9bc8ef2dd9063dae326a3d28cd6914cef2db935b60ace9a7",
+    "/ics.js": "e610eebe439a73c85a21c4d913be31b4bd20337a94cadb55c7d74ed3b342d665",
+    "/index.html": "3466e268a649cc291f863c614420bfe4d3c89bb3804591e8e007dbcb705a4f4c",
+    "/manifest.json": "a8c1ba53e3994ce208e7c3dde2363f96f51be463a5dd4b72ae669879ec00283f",
     "/offline.html": "dc580dca70adf7a38a37138cd374aae65deec19aa80d7d1e64b8424162771ebb",
     "/store.js": "64c93e70a3c709e2378a2c0c9358c98072843dffdcf5ab7c95dc6d0639667aea",
     "/task_core.js": "a5dc4339f0725b8a3c0b081153bedae62ebade654ce8faec749399c340043348"

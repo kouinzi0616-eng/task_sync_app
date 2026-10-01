@@ -4,7 +4,8 @@
 // HTML の中に script を書かず、このファイルから読み込む。
 // 入力や API の応答に由来する文字は textContent で入れる（HTML として解釈させない）。
 // タスクの保存（B29）は端末の中（IndexedDB）だけ。外部には送らない（通信は解析の /api/parse-batch だけ）。
-// 台帳の計算は task_core.js（TaskCore）、保存場所は store.js（TaskStore）。index.html で先に読み込む。
+// 台帳の計算は task_core.js（TaskCore）、保存場所は store.js（TaskStore）、
+// カレンダー用ファイル（.ics・B30）は ics.js（TaskIcs）。index.html で先に読み込む。
 // ============================================================
 'use strict';
 
@@ -12,6 +13,7 @@
     const API_BASE = '';
     const TaskCore = window.TaskCore;
     const TaskStore = window.TaskStore;
+    const TaskIcs = window.TaskIcs;
     const MAX_FILE_BYTES = 5 * 1024 * 1024;  // 読み込むファイル（JSON・CSV）の上限
     // 期限の種類（API の due_type）の表示名
     const DUE_TYPE_LABELS = {
@@ -496,13 +498,11 @@
         if (ui.tasksHeading) ui.tasksHeading.focus();
     }
 
-    // 解析の結果を端末に保存する（一度保存した行は、もう一度は保存しない）。保存したタスクを返す
-    async function saveParsed() {
+    // 解析の結果を端末に保存する（一度保存した行は、もう一度は保存しない）。
+    // 返す値: { created: 新しく保存したタスク, skipped: 件名が無く保存しなかった数, error: 失敗の文言 }
+    async function storeParsed() {
         await saved.ready;
-        if (!saved.store) {
-            showError(saved.warning || '保存できません');
-            return [];
-        }
+        if (!saved.store) return { created: [], skipped: 0, error: saved.warning || '保存できません' };
         const rows = parsedTasks.filter(row => row.ok !== false && !row.savedId);
         const at = now();
         const created = [];
@@ -516,24 +516,34 @@
                 skipped += 1;  // 件名の無い行など
             }
         });
-        if (created.length === 0) {
-            showSuccess(parsedTasks.some(row => row.savedId) ? 'この結果は、もう端末に保存してあります' : '保存できるタスクがありません');
-            return [];
-        }
+        if (created.length === 0) return { created, skipped, error: '' };
         try {
             await saved.store.putMany(created);
         } catch (err) {
             created.forEach(task => { const row = parsedTasks.find(r => r.savedId === task.id); if (row) delete row.savedId; });
-            showError('端末に保存できませんでした');
-            return [];
+            return { created: [], skipped, error: '端末に保存できませんでした' };
         }
         saved.tasks = saved.tasks.concat(created);
         renderSaved();
         TaskStore.requestPersistence(window);
-        const note = saved.store.kind === 'indexeddb' ? '' : '（一時の保存です。画面を閉じると消えます）';
-        showSuccess(`${created.length}件を端末に保存しました${skipped ? `（件名の無い${skipped}件は保存していません）` : ''}。`
-            + `「本人の番」「一覧」で状態を変えられます${note}`);
-        return created;
+        return { created, skipped, error: '' };
+    }
+
+    function savedNote(result) {
+        const note = saved.store && saved.store.kind !== 'indexeddb' ? '（一時の保存です。画面を閉じると消えます）' : '';
+        const skipped = result.skipped ? `（件名の無い${result.skipped}件は保存していません）` : '';
+        return `${result.created.length}件を端末に保存しました${skipped}${note}`;
+    }
+
+    async function saveParsed() {
+        const result = await storeParsed();
+        if (result.error) {
+            showError(result.error);
+        } else if (result.created.length === 0) {
+            showSuccess(parsedTasks.some(row => row.savedId) ? 'この結果は、もう端末に保存してあります' : '保存できるタスクがありません');
+        } else {
+            showSuccess(`${savedNote(result)}。「本人の番」「一覧」で状態を変えられます`);
+        }
     }
 
     function fileStamp(at) {
@@ -698,6 +708,73 @@
     }
 
     // ------------------------------------------------------------
+    // カレンダー用ファイル（.ics）（B30）: 端末の中で作って保存する。送信も OAuth もしない
+    // ------------------------------------------------------------
+
+    const ICS_MISSING = 'カレンダー用ファイルの部品（ics.js）を読み込めませんでした。読み込み直してください';
+
+    // 作ったファイルの説明（入れなかったものの数）
+    function icsSkippedNote(skipped) {
+        const parts = [];
+        if (skipped.no_deadline) parts.push(`期限の無い${skipped.no_deadline}件`);
+        if (skipped.done) parts.push(`完了の${skipped.done}件`);
+        return parts.length ? `（${parts.join('・')}は入れていません）` : '';
+    }
+
+    // ファイルを作って保存する。作れたら件数を、予定が無ければ 0 を返す
+    function downloadIcs(tasks) {
+        const at = now();
+        const built = TaskIcs.buildIcs(tasks, { now: at });
+        if (built.count === 0) return { count: 0, filename: '', skipped: built.skipped };
+        const filename = `task-sync-${fileStamp(at)}.ics`;
+        downloadText(filename, built.text, 'text/calendar;charset=utf-8');
+        return { count: built.count, filename, skipped: built.skipped };
+    }
+
+    // 解析の結果から: 先に端末に保存して固定の ID を振り、その ID を UID にする
+    async function saveParsedIcs() {
+        if (!TaskIcs) {
+            showError(ICS_MISSING);
+            return;
+        }
+        const stored = await storeParsed();
+        if (stored.error) {
+            showError(stored.error);
+            return;
+        }
+        const tasks = parsedTasks
+            .map(row => row.savedId && saved.tasks.find(task => task.id === row.savedId))
+            .filter(Boolean);
+        const result = downloadIcs(tasks);
+        const savedText = stored.created.length ? `${savedNote(stored)}。` : '';
+        if (result.count === 0) {
+            showError(`${savedText}期限のあるタスクが無いので、カレンダー用ファイルは作りませんでした`);
+            return;
+        }
+        showSuccess(`${savedText}${result.count}件の予定をカレンダー用ファイル（${result.filename}）にしました${icsSkippedNote(result.skipped)}。`
+            + 'カレンダーのアプリで読み込んでください');
+    }
+
+    // 一覧から: 期限のある未完了のタスクを全部
+    async function saveAllIcs() {
+        await saved.ready;
+        if (!TaskIcs) {
+            notify(ui.ioNotice, ICS_MISSING);
+            return;
+        }
+        if (!saved.tasks.length) {
+            notify(ui.ioNotice, '保存したタスクがありません');
+            return;
+        }
+        const result = downloadIcs(saved.tasks);
+        if (result.count === 0) {
+            notify(ui.ioNotice, `期限のある未完了のタスクが無いので、カレンダー用ファイルは作りませんでした${icsSkippedNote(result.skipped)}`);
+            return;
+        }
+        notify(ui.ioNotice, `${result.count}件の予定をカレンダー用ファイル（${result.filename}）にしました${icsSkippedNote(result.skipped)}`);
+    }
+
+    // ------------------------------------------------------------
     // PWA（ホーム画面への追加・Service Worker）
     // ------------------------------------------------------------
 
@@ -767,7 +844,8 @@
         ui = {
             taskInput: byId('taskInput'),
             parseBtn: byId('parseBtn'),
-            syncBtn: byId('syncBtn'),
+            icsBtn: byId('icsBtn'),
+            icsAllBtn: byId('icsAllBtn'),
             loading: byId('loading'),
             error: byId('error'),
             success: byId('success'),
@@ -805,10 +883,9 @@
         ui.parseBtn.addEventListener('click', onParse);
         setupSaved();
 
-        // 同期ボタン
-        ui.syncBtn.addEventListener('click', () => {
-            alert('Google Calendar API連携は次のステップで実装します！\n\nGOOGLE_CALENDAR_SETUP.mdを参照してください。');
-        });
+        // カレンダー用ファイル（.ics）。前の「Googleカレンダーに同期」（未実装の案内だけ）を置きかえた（B30）
+        ui.icsBtn.addEventListener('click', saveParsedIcs);
+        ui.icsAllBtn.addEventListener('click', saveAllIcs);
 
         setupInstallPrompt();
         registerServiceWorker();

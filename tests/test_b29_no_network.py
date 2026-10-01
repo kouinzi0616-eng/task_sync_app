@@ -57,7 +57,7 @@ def network_uses(source: str) -> dict[str, int]:
 
 def test_new_frontend_files_exist():
     names = {p.name for p in JS_FILES}
-    assert {"app.js", "sw.js", "task_core.js", "store.js"} <= names
+    assert {"app.js", "sw.js", "task_core.js", "store.js", "ics.js"} <= names
 
 
 @pytest.mark.parametrize("path", JS_FILES, ids=lambda p: p.name)

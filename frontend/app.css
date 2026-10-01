@@ -39,6 +39,11 @@
     box-sizing: border-box;
 }
 
+/* hidden 属性の付いた要素は、display を書いた規則（.field など）があっても出さない */
+[hidden] {
+    display: none !important;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Yu Gothic UI', 'Meiryo', sans-serif;
     color: var(--text);
@@ -358,10 +363,6 @@ textarea:focus {
     font-size: 12px;
     color: var(--text-muted);
     margin-top: 6px;
-}
-
-.sync-btn {
-    margin-top: 16px;
 }
 
 .stats {

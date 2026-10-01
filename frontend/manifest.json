@@ -1,7 +1,7 @@
 {
   "name": "Task Sync - タスク同期アプリ",
   "short_name": "Task Sync",
-  "description": "タスクを解析してGoogleカレンダーに同期するPWA",
+  "description": "タスクを解析して端末に保存し、カレンダー用ファイル（.ics）を作るPWA",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#4f5bd5",

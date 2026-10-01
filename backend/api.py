@@ -20,7 +20,7 @@ from typing import Annotated, List
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from starlette.datastructures import MutableHeaders
@@ -50,7 +50,7 @@ API_DOCS_ENABLED = _env_flag("ENABLE_API_DOCS")
 # FastAPIアプリ
 app = FastAPI(
     title="Task Sync API",
-    description="タスク同期・カテゴリ分類・カレンダー連携API",
+    description="タスク解析・カテゴリ分類API（カレンダー用ファイルは画面が作る）",
     version="1.0.0",
     docs_url="/docs" if API_DOCS_ENABLED else None,
     redoc_url="/redoc" if API_DOCS_ENABLED else None,
@@ -205,11 +205,6 @@ class TaskListInput(BaseModel):
     )
 
 
-class SyncRequest(BaseModel):
-    """Google Calendar同期リクエスト"""
-    tasks: List[TaskResponse] = Field(..., max_length=MAX_BATCH_TASKS)
-
-
 # ============================================================
 # 解析の本体
 # ============================================================
@@ -313,27 +308,18 @@ async def parse_tasks_batch(task_list: TaskListInput):
     return results
 
 
-@app.post("/api/sync-calendar")
-async def sync_to_calendar(sync_request: SyncRequest):
-    """
-    Google Calendarに同期（未実装 - フロントエンドからOAuth経由で実行予定）
-    
-    Args:
-        sync_request: 同期するタスクのリスト
-        
-    Returns:
-        同期結果
-    """
-    # TODO: Google Calendar API連携を実装
-    # 現在はフロントエンドでGoogle Calendar APIを直接呼び出す想定
-    
-    logger.info(f"カレンダー同期リクエスト受信: {len(sync_request.tasks)}件")
-    
-    return {
-        "status": "not_implemented",
-        "message": "Google Calendar同期はフロントエンドから直接実行してください",
-        "tasks_count": len(sync_request.tasks)
-    }
+# カレンダーへの登録はサーバーではしない（B30）。OAuth も鍵もサーバーに置かない。
+# 画面が端末の中でカレンダー用ファイル（.ics）を作る。古い画面などから呼ばれたときのために 501 を返す（本文は読まない）
+SYNC_CALENDAR_MESSAGE = (
+    "カレンダーへの登録はサーバーでは行いません。"
+    "画面の「カレンダー用ファイルを保存」で .ics を作り、カレンダーのアプリで読み込んでください"
+)
+
+
+@app.post("/api/sync-calendar", status_code=501)
+async def sync_to_calendar():
+    """使わない（501）。カレンダー用ファイル（.ics）は画面が作る"""
+    return JSONResponse(status_code=501, content={"status": "not_implemented", "detail": SYNC_CALENDAR_MESSAGE})
 
 
 # ============================================================
@@ -386,6 +372,11 @@ if frontend_dir.exists() and frontend_dir.is_dir():
     @app.get("/store.js")
     async def serve_store_js():
         return _frontend_file("store.js", "application/javascript")
+
+    # カレンダー用ファイル（.ics）を画面の中で作る（B30）
+    @app.get("/ics.js")
+    async def serve_ics_js():
+        return _frontend_file("ics.js", "application/javascript")
 
     # 電波が無いときに Service Worker が返すオフライン画面（sw.js が先にキャッシュする）
     @app.get("/offline.html", response_class=HTMLResponse)

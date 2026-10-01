@@ -127,10 +127,11 @@ def test_helper_scripts_load_before_app_js():
     scripts = re.findall(r'<script src="/([\w.]+)" defer></script>', INDEX)
     assert scripts.index("task_core.js") < scripts.index("app.js")
     assert scripts.index("store.js") < scripts.index("app.js")
+    assert scripts.index("ics.js") < scripts.index("app.js")
 
 
 def test_helper_scripts_are_served(client):
-    for name in ("task_core.js", "store.js"):
+    for name in ("task_core.js", "store.js", "ics.js"):
         response = client.get(f"/{name}")
         assert response.status_code == 200, name
         assert response.headers["content-type"].startswith("application/javascript"), name
@@ -142,3 +143,10 @@ def test_default_lanes_are_generic_samples():
     # 公開しているコードには見本のレーン名だけを置く（本当の名前は端末ごとの設定）
     core = (FRONTEND / "task_core.js").read_text(encoding="utf-8")
     assert "const DEFAULT_LANES = ['仕事', '学び', '暮らし'];" in core
+
+
+def test_hidden_attribute_wins_over_display_rules():
+    # .field（display: flex）の中の控えの欄に hidden を付けても見えていた（実ブラウザで見つけた）
+    css = (FRONTEND / "app.css").read_text(encoding="utf-8")
+    assert re.search(r"\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}", css)
+    assert re.search(r'<div class="field" id="copyFallback" hidden>', INDEX)

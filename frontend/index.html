@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#4f5bd5">
-    <meta name="description" content="タスクを解析してGoogleカレンダーに同期するPWA">
+    <meta name="description" content="タスクを解析して端末に保存し、カレンダー用ファイル（.ics）を作るPWA">
     <title>Task Sync - タスク同期アプリ</title>
     
     <!-- PWA設定 -->
@@ -15,13 +15,14 @@
     <link rel="stylesheet" href="/app.css">
     <script src="/task_core.js" defer></script>
     <script src="/store.js" defer></script>
+    <script src="/ics.js" defer></script>
     <script src="/app.js" defer></script>
 </head>
 <body>
     <div class="container">
         <header class="header">
             <h1><span aria-hidden="true">📋</span> Task Sync</h1>
-            <p>タスクを解析してGoogleカレンダーに同期</p>
+            <p>タスクを解析して、端末に保存・カレンダー用ファイルに</p>
         </header>
         
         <!-- 新しい版の案内（Service Worker が新しい画面を用意できたら app.js が中身を入れる） -->
@@ -65,9 +66,9 @@
                     <ul class="task-list" id="taskList"></ul>
                     <div class="actions">
                         <button type="button" class="btn btn-secondary" id="saveBtn"><span aria-hidden="true">💾</span> 端末に保存</button>
-                        <button type="button" class="btn btn-success sync-btn" id="syncBtn"><span aria-hidden="true">📅</span> Googleカレンダーに同期</button>
+                        <button type="button" class="btn btn-success" id="icsBtn" aria-describedby="icsHint"><span aria-hidden="true">📅</span> カレンダー用ファイルを保存</button>
                     </div>
-                    <p class="hint">保存はこの端末の中だけです。外部には送りません。</p>
+                    <p class="hint" id="icsHint">保存はこの端末の中だけです。外部には送りません。カレンダー用ファイル（.ics）は、端末に保存してから作ります。カレンダーのアプリで読み込んでください。</p>
                 </div>
             </section>
             
@@ -106,6 +107,7 @@
                         <button type="button" class="btn btn-secondary" id="exportJsonBtn">JSON に書き出す（控え・端末の引っ越し）</button>
                         <button type="button" class="btn btn-secondary" id="copyMarkdownBtn">台帳の形でコピー（Markdown の表）</button>
                         <button type="button" class="btn btn-secondary" id="copyCsvBtn">台帳の形でコピー（CSV）</button>
+                        <button type="button" class="btn btn-success" id="icsAllBtn"><span aria-hidden="true">📅</span> カレンダー用ファイルを保存（期限のある未完了のタスク）</button>
                     </div>
                     <div class="field">
                         <label for="importJsonInput">書き出した JSON を読み込む</label>

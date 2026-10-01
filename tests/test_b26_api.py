@@ -99,15 +99,15 @@ def test_batch_rows_have_new_fields_and_failed_rows_need_review(client, frozen_n
     assert "内部の詳細" not in response.text
 
 
-def test_sync_request_still_accepts_old_shape(client):
-    # 画面が古いまま（新しい項目なし）で送っても受け付ける
+def test_sync_calendar_answers_501_for_any_old_request(client):
+    # B30 でサーバーのカレンダー同期をやめた。古い形で送っても、本文を読まずに 501 を返す
     old_shape = {
         "title": "書類", "deadline": None, "category": api.Category.PERSONAL.value,
         "raw_text": "書類", "warnings": [],
     }
     response = client.post("/api/sync-calendar", json={"tasks": [old_shape]})
-    assert response.status_code == 200
-    assert response.json()["tasks_count"] == 1
+    assert response.status_code == 501
+    assert "tasks_count" not in response.json()
 
 
 def test_frontend_shows_reading_and_review_marks_with_text_content(client):

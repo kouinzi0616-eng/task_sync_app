@@ -50,9 +50,10 @@ def test_parse_endpoint_returns_200(client):
     assert response.status_code == 200
 
 
-def test_sync_calendar_is_not_implemented_yet(client):
+def test_sync_calendar_is_not_done_on_the_server(client):
+    # B30: カレンダーへの登録はサーバーでしない（画面が .ics を作る）。501 を返す
     response = client.post("/api/sync-calendar", json={"tasks": []})
-    assert response.status_code == 200
+    assert response.status_code == 501
     assert response.json()["status"] == "not_implemented"
 
 

@@ -55,6 +55,7 @@ function setup({ fetchImpl, onLine = true, serviceWorker, clipboard, confirmAnsw
     const fetchCalls = [];
     const downloads = [];
     const confirms = [];
+    const alerts = [];
     const navigator = { onLine };
     if (serviceWorker) navigator.serviceWorker = serviceWorker;
     if (clipboard) navigator.clipboard = clipboard;
@@ -75,7 +76,7 @@ function setup({ fetchImpl, onLine = true, serviceWorker, clipboard, confirmAnsw
         },
         setTimeout: (...args) => { timers.push(args); return timers.length; },
         setInterval: (...args) => { timers.push(args); return timers.length; },
-        alert: () => {},
+        alert: message => { alerts.push(message); },
         confirm: message => { confirms.push(message); return confirmAnswer; },
         location: { reload: () => reloads.push(1) },
         addEventListener: () => {},
@@ -98,7 +99,7 @@ function setup({ fetchImpl, onLine = true, serviceWorker, clipboard, confirmAnsw
     for (const helper of HELPER_SCRIPTS) vm.runInContext(helper.source, sandbox, { filename: `frontend/${helper.name}` });
     vm.runInContext(APP_JS, sandbox, { filename: 'frontend/app.js' });
     const $ = id => document.getElementById(id);
-    return { document, sandbox, timers, reloads, fetchCalls, downloads, confirms, $ };
+    return { document, sandbox, timers, reloads, fetchCalls, downloads, confirms, alerts, $ };
 }
 
 // ------------------------------------------------------------
@@ -627,10 +628,73 @@ async function lanesSetting() {
         && backup.tasks.some(t => t.lane === '架空の家'));
 }
 
+// ------------------------------------------------------------
+// 6. カレンダー用ファイル（.ics）（B30）
+// ------------------------------------------------------------
+const ICS_ROWS = PARSED_ROWS.slice(0, 2).concat([{
+    ok: true, title: '架空の期限なしのメモ', deadline: null, category: '個人', raw_text: '架空の期限なしのメモ',
+    warnings: [], due_type: 'none', due_raw: '', due_time: null, needs_review: false, overdue: false
+}]);
+const uidsOf = text => Array.from(String(text).matchAll(/^UID:(.+)\r$/gm), m => m[1]);
+
+async function calendarFile() {
+    const env = setup({ fetchImpl: async () => jsonResponse(200, ICS_ROWS) });
+    await flush();
+    check('ics: 前の同期ボタン（未実装の案内）は無い', env.$('syncBtn') === null && env.$('icsBtn').textContent.includes('カレンダー用ファイルを保存'));
+    env.$('taskInput').value = '架空の資料作り (3/15まで)\n架空の打ち合わせ (明日15時)\n架空の期限なしのメモ';
+    env.$('parseBtn').click();
+    await flush();
+    env.$('icsBtn').click();
+    await flush(10);
+    const file = env.downloads[0];
+    check('ics: 「カレンダー用ファイルを保存」で .ics を保存する',
+        file && /^task-sync-\d{8}\.ics$/.test(file.name) && file.type === 'text/calendar;charset=utf-8',
+        JSON.stringify(file && { name: file.name, type: file.type }));
+    const savedIds = ids(env.$('allList'));
+    const uids = uidsOf(file && file.text);
+    check('ics: 先に端末に保存し（3件）、その固定の ID を UID にする（期限のある2件）',
+        savedIds.length === 3 && uids.length === 2 && uids.every(uid => savedIds.includes(uid)), `${savedIds} / ${uids}`);
+    check('ics: 知らせ（保存した件数・予定の件数・入れなかったもの）',
+        env.$('success').textContent === `3件を端末に保存しました（一時の保存です。画面を閉じると消えます）。2件の予定をカレンダー用ファイル（${file && file.name}）にしました`
+            + '（期限の無い1件は入れていません）。カレンダーのアプリで読み込んでください', env.$('success').textContent);
+    check('ics: 中身は VCALENDAR で CRLF', file && file.text.startsWith('BEGIN:VCALENDAR\r\nVERSION:2.0\r\n') && file.text.endsWith('END:VCALENDAR\r\n'));
+    check('ics: 未実装の案内（alert）を出さない', env.alerts.length === 0, env.alerts.join(' / '));
+
+    env.$('icsBtn').click();
+    await flush(10);
+    check('ics: もう一度押しても重ねて保存せず、同じ UID のファイルを作る',
+        ids(env.$('allList')).length === 3 && uidsOf(env.downloads[1] && env.downloads[1].text).join() === uids.join()
+        && env.$('success').textContent.startsWith('2件の予定をカレンダー用ファイル'), env.$('success').textContent);
+
+    // 一覧から（完了は入れない）
+    const done = env.$('allList').children.find(item => item.getAttribute('data-id') === uids[0]);
+    button(done, 'done').click();
+    await flush(10);
+    env.$('icsAllBtn').click();
+    await flush(10);
+    const all = env.downloads[2];
+    check('ics: 一覧からは期限のある未完了のタスクだけ', all && uidsOf(all.text).join() === uids[1]
+        && env.$('ioNotice').textContent.endsWith('（期限の無い1件・完了の1件は入れていません）'), env.$('ioNotice').textContent);
+
+    // 期限のあるタスクが無いとき
+    const none = setup({ fetchImpl: async () => jsonResponse(200, ICS_ROWS.slice(2)) });
+    await flush();
+    none.$('taskInput').value = '架空の期限なしのメモ';
+    none.$('parseBtn').click();
+    await flush();
+    none.$('icsBtn').click();
+    await flush(10);
+    check('ics: 期限のあるタスクが無ければファイルを作らず、理由を出す', none.downloads.length === 0
+        && none.$('error').textContent === '1件を端末に保存しました（一時の保存です。画面を閉じると消えます）。期限のあるタスクが無いので、カレンダー用ファイルは作りませんでした',
+        none.$('error').textContent);
+    check('network: .ics を作っても通信は解析だけ',
+        [env, none].every(e => e.fetchCalls.every(call => call.url === '/api/parse-batch')));
+}
+
 const scenarios = [
     xssIsShownAsText, noticesStay, loadingState, errorResponses, tabsKeyboard,
     updateNotice, firstInstallHasNoNotice, waitingWorkerShowsNotice,
-    saveAndChangeStatus, staleAndImportErrors, copyLedger, notionCsv, lanesSetting
+    saveAndChangeStatus, staleAndImportErrors, copyLedger, notionCsv, lanesSetting, calendarFile
 ];
 for (const scenario of scenarios) {
     try {

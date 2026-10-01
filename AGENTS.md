@@ -10,9 +10,9 @@ AI エージェント（Claude Code・Codex など）と人が最初に読む短
 | 場所 | 中身 |
 |------|------|
 | `backend/api.py` | FastAPI 本体。画面（frontend/）も配信する。Render は `uvicorn backend.api:app` で起動 |
-| `backend/date_parser.py` | Web API 用の期限解析 |
+| `backend/date_parser.py` | 期限解析の薄い互換層（JST の今日を基準日にし、期限を JST 0:00 にする）。読み方の正本は `backend/task_sync/date_rules.py` |
 | `backend/category_classifier.py`・`backend/models.py` | カテゴリ分類とデータの形 |
-| `backend/task_sync/` | カレンダー同期用の解析・同期の部品（Google の依存は `requirements-calendar.txt`） |
+| `backend/task_sync/` | 期限解析の正本（`date_rules.py`）と、カレンダー同期用の解析・同期の部品（Google の依存は `requirements-calendar.txt`） |
 | `backend/database.py` | 履歴保存（今は API から使っていない） |
 | `frontend/` | PWA（index.html・sw.js・manifest.json・アイコン） |
 | `tests/` | pytest。`labs/` ができたら、そこのテストも一緒に回る |
@@ -25,7 +25,7 @@ python3 -m pip install -r requirements.txt -r requirements-dev.txt   # 初回だ
 bash scripts/check.sh
 ```
 - CI（`.github/workflows/ci.yml`）も同じ `scripts/check.sh` を Python 3.11 / 3.12 / 3.13 で回す。
-- 期限解析を変えたら、`tests/test_api_parse_current.py` の正常系の出力が変わらないことを確かめる。
+- 期限解析を変えたら、`tests/test_api_parse_current.py` の正常系の出力が変わらないことと、共通検算表 `tests/fixtures/due_cases.json` の全件一致（`tests/test_due_cases.py`）を確かめる。仕様を変えるときは、表の期待値と備考（【旧と違う】と理由）と README の表を一緒に直す。
 - Claude Code on the web では、SessionStart フック（`.claude/hooks/session-start.sh`）が `.venv` に依存を入れる。
 
 ## 依存と版

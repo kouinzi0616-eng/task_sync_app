@@ -11,6 +11,10 @@ extendedProperties.private.task_id を用いた二重登録防止。
 動作環境: Python 3.10+
 必要ライブラリ: google-api-python-client, google-auth-oauthlib
 ============================================================
+
+注意（B30）: Web アプリ（Render）からは使わない。カレンダーへは、画面が作る .ics ファイル
+（frontend/ics.js）で入れる。理由（手元の PC 向けの OAuth・広すぎる権限・task_id のハッシュによる
+予定の二重登録）は README の「カレンダー用ファイル（.ics）」に書いた。
 """
 
 from __future__ import annotations
@@ -181,7 +185,7 @@ class GoogleCalendarClient:
         # 終日イベント: start.date = due_date, end.date = due_date + 1日
         end_date = task.due_date + timedelta(days=1)
         return {
-            "summary": f"[{task.category.value}] {task.title}",
+            "summary": f"[{task.category}] {task.title}",
             "description": task.description_text,
             "start": {"date": task.due_date.isoformat()},
             "end": {"date": end_date.isoformat()},

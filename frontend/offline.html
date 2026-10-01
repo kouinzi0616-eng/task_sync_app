@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4f5bd5">
+    <title>オフライン - Task Sync</title>
+    <!-- 電波が無くて画面を開けないときに、Service Worker が返すページ（sw.js が先にキャッシュしておく） -->
+    <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><span aria-hidden="true">📋</span> Task Sync</h1>
+        </header>
+        <main>
+            <div class="card offline-card">
+                <h2 class="card-title">オフラインです</h2>
+                <p>インターネットにつながっていないため、画面を開けませんでした。</p>
+                <p>電波のよい所で、もう一度読み込んでください。</p>
+                <a class="offline-link" href="/">もう一度読み込む</a>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

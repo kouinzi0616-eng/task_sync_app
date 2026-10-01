@@ -1,0 +1,19 @@
+# ============================================================
+# 本番（Render）で使う直接の依存
+# ============================================================
+# ここを変えたら、版を固定した requirements.txt を作り直す:
+#   uv pip compile requirements.in -o requirements.txt --universal --python-version 3.11
+# Render は requirements.txt を読む（Build Command: pip install -r requirements.txt）。
+# Google カレンダー連携の依存は requirements-calendar.in に分けている。
+# ============================================================
+
+# FastAPI & サーバー
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# データ検証
+pydantic>=2.7.4,<3.0.0
+
+# 日付処理（時刻帯は標準の zoneinfo。tzdata は Windows など OS に時刻帯データが無いとき用）
+python-dateutil>=2.8.2
+tzdata

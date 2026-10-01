@@ -35,3 +35,21 @@ Thumbs.db
 .pytest_cache/
 htmlcov/
 .coverage
+
+# 監査ログ（JSON Lines）・実行ログ
+logs/
+*.jsonl
+
+# 環境変数ファイル（見本の .env.example だけは共有する）
+.env
+.env.*
+!.env.example
+
+# Google の OAuth クライアント情報（既定のファイル名は client_secret_<ID>.apps.googleusercontent.com.json）
+client_secret*.json
+
+# 手元だけで使うメモ・実データ置き場
+private/
+
+# ツールのキャッシュ
+.ruff_cache/

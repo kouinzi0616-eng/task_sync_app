@@ -1,0 +1,15 @@
+# ツールの設定だけを置く（パッケージ化はしない）。
+# Render は requirements.txt を pip で入れるので、このファイルはビルドに使われない。
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = [".venv", "venv"]
+
+[tool.ruff.lint]
+# ruff の版が変わっても結果が変わらないよう、規則を明示する。
+select = ["E4", "E7", "E9", "F", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "labs"]
+pythonpath = ["."]
+addopts = "-ra"

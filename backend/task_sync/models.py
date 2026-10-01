@@ -22,16 +22,8 @@ from typing import Optional
 from pydantic import BaseModel, Field, computed_field
 
 
-# ═══════════════════════════════════════════════════════════════
-# カテゴリ列挙型
-# ═══════════════════════════════════════════════════════════════
-
-class TaskCategory(str, Enum):
-    """タスクのカテゴリ（Googleカレンダー上のカレンダー名に対応）"""
-    TEMPLE = "寺院関係"
-    SEIHOUKAI = "青鳳会"
-    EIDOUBU = "詠道部"
-    PERSONAL = "個人"
+# カテゴリは B27 で設定（JSON）から決めるようにした。名前の一覧はコードに書かない。
+# 判定の正本は categories.py（設定の読み先と見本は README の「カテゴリの設定」）。
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -39,11 +31,19 @@ class TaskCategory(str, Enum):
 # ═══════════════════════════════════════════════════════════════
 
 class DueType(str, Enum):
-    """期限表現の種類（監査ログ用に原文を保持する判定材料）"""
-    EXACT = "exact"          # M/Dまで, D日まで
-    MONTH_END = "month_end"  # M月まで, M月中
-    SOON = "soon"            # 早め / なるべく早め
+    """期限表現の種類（監査ログ用に原文を保持する判定材料）。
+
+    値の文字列は API の応答（due_type）と検算表（tests/fixtures/due_cases.json）でも使う。
+    """
+    EXACT = "exact"          # M/Dまで, M月D日, D日まで, 2026/3/15, 令和8年3月15日
+    MONTH_END = "month_end"  # M月まで, M月中, 月末, 今月中, 来月末, 年内, 年度末
+    PERIOD = "period"        # 上旬（10日）・中旬（20日）・下旬（末日）
+    WEEK = "week"            # 今週中, 来週まで, 再来週（その週の日曜。週は月曜始まり）
+    RELATIVE = "relative"    # 今日, 明日, 明後日, 3日後, 金曜, 来週火曜, 時刻だけ
+    URGENT = "urgent"        # 至急（翌日）, 大至急（今日）
+    SOON = "soon"            # 早め / なるべく早め（3日後）
     AFTER = "after"          # D日以降
+    UNKNOWN = "unknown"      # 期限らしいが読めない・存在しない日付（要確認）
     NONE = "none"            # 期限指定なし
 
 
@@ -56,16 +56,19 @@ class Task(BaseModel):
 
     source_text: str = Field(..., description="パース元の原文1行")
     title: str = Field(..., description="正規化後のタスク名")
-    category: TaskCategory = Field(..., description="自動判定カテゴリ")
+    category: str = Field(..., description="自動判定カテゴリ（設定にあるカテゴリ名）")
+    category_hits: list[str] = Field(default_factory=list, description="カテゴリの判定で当たった語（空なら既定のカテゴリ）")
     due_date: date = Field(..., description="算出した期限日")
     due_type: DueType = Field(DueType.NONE, description="期限表現の種類")
     due_raw: str = Field("", description="期限部分の原文（括弧内テキスト）")
+    needs_review: bool = Field(False, description="人が確かめるべき行か（読めない・あいまい・期限切れなど）")
+    warnings: list[str] = Field(default_factory=list, description="要確認の理由（利用者に見せる文）")
 
     @computed_field  # type: ignore[misc]
     @property
     def task_id(self) -> str:
         """カテゴリ＋正規化タイトル＋期限日から安定ハッシュを生成"""
-        seed = f"{self.category.value}|{self.title}|{self.due_date.isoformat()}"
+        seed = f"{self.category}|{self.title}|{self.due_date.isoformat()}"
         return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
 
     @property
@@ -73,11 +76,15 @@ class Task(BaseModel):
         """Googleカレンダーの description に書き込む内容"""
         lines = [
             f"【原文】{self.source_text}",
-            f"【カテゴリ】{self.category.value}",
+            f"【カテゴリ】{self.category}",
             f"【期限種別】{self.due_type.value}",
         ]
+        if self.category_hits:
+            lines.insert(2, f"【カテゴリの理由】{'・'.join(self.category_hits)}")
         if self.due_raw:
             lines.append(f"【期限原文】{self.due_raw}")
+        for warning in self.warnings:
+            lines.append(f"【要確認】{warning}")
         return "\n".join(lines)
 
 

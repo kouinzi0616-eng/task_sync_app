@@ -121,4 +121,3 @@ def test_frontend_shows_reading_and_review_marks_with_text_content(client):
     for line in js.splitlines():
         if "innerHTML" in line:
             assert "task." not in line, line
-

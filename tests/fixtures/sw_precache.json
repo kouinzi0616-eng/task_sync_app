@@ -1,0 +1,15 @@
+{
+  "cache_version": 4,
+  "files": {
+    "/": "e043134bef76e91afee468322a17aa977d55ef8f941b4ec9b1b439ca204c95b6",
+    "/app.css": "da8d5480810c4247e568a1931fc6c6c6af8c56f35a58fe13b505e92a8885d521",
+    "/app.js": "039828b48456a485585e2eb4d5a1f52296ee56686dba28ff858c9c2afc170789",
+    "/icon-192.png": "33e2e0b2f061c3251909a03a4988a08e26aa65101beb58b15ddc006bf555b7a1",
+    "/icon-512.png": "0d159f3e0fb397496d7aab0cf2a8fd3a9583876f1b15f88b0cfac030079358c3",
+    "/icon-maskable-192.png": "15cdb29aa632f12af8440d766e073e8a774cf89311199aa5ef6baeb42af7eb03",
+    "/icon-maskable-512.png": "85e2fc5de45d40c4876dbe8c75472ca48df24d19cb554c6758c3913e2d53cc93",
+    "/index.html": "e043134bef76e91afee468322a17aa977d55ef8f941b4ec9b1b439ca204c95b6",
+    "/manifest.json": "3b5792516348e9bf9bc8ef2dd9063dae326a3d28cd6914cef2db935b60ace9a7",
+    "/offline.html": "dc580dca70adf7a38a37138cd374aae65deec19aa80d7d1e64b8424162771ebb"
+  }
+}

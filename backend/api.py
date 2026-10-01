@@ -376,6 +376,11 @@ if frontend_dir.exists() and frontend_dir.is_dir():
     async def serve_app_css():
         return _frontend_file("app.css", "text/css")
 
+    # 電波が無いときに Service Worker が返すオフライン画面（sw.js が先にキャッシュする）
+    @app.get("/offline.html", response_class=HTMLResponse)
+    async def serve_offline_page():
+        return _frontend_file("offline.html", "text/html")
+
     # manifest.json
     @app.get("/manifest.json")
     async def serve_manifest():

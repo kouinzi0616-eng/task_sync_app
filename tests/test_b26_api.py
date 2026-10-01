@@ -122,7 +122,3 @@ def test_frontend_shows_reading_and_review_marks_with_text_content(client):
         if "innerHTML" in line:
             assert "task." not in line, line
 
-
-def test_service_worker_cache_name_was_bumped_for_new_screen(client):
-    # 画面を変えたらキャッシュ名の番号を上げる（古い画面が残らないように）
-    assert "task-sync-v3" in client.get("/sw.js").text

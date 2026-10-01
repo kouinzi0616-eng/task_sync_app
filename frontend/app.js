@@ -299,9 +299,48 @@
         });
     }
 
+    // 新しい版（sw.js）が入って待っているとき、「新しい版があります」と「更新する」を出す
+    function showUpdateNotice(worker, onAccept) {
+        const banner = ui.updateBanner;
+        if (!banner || banner.childNodes.length > 0) return;  // 出すのは1回だけ
+        const button = create('button', null, '更新する');
+        button.setAttribute('type', 'button');
+        button.addEventListener('click', () => {
+            button.setAttribute('aria-disabled', 'true');
+            onAccept();
+            worker.postMessage({ type: 'SKIP_WAITING' });
+        });
+        banner.append(create('span', null, '新しい版があります。'), button);
+    }
+
     function registerServiceWorker() {
         if (!('serviceWorker' in navigator)) return;
-        navigator.serviceWorker.register('/sw.js')
+        const sw = navigator.serviceWorker;
+        let updateAccepted = false;
+        let reloading = false;
+
+        // 「更新する」を押して新しい版に切り替わったら、読み込み直す。
+        // 初めて入れたとき（押していないとき）は読み込み直さない
+        sw.addEventListener('controllerchange', () => {
+            if (!updateAccepted || reloading) return;
+            reloading = true;
+            window.location.reload();
+        });
+
+        const accept = () => { updateAccepted = true; };
+        sw.register('/sw.js')
+            .then(reg => {
+                // 前に開いたときから待っている新しい版
+                if (reg.waiting && sw.controller) showUpdateNotice(reg.waiting, accept);
+                reg.addEventListener('updatefound', () => {
+                    const worker = reg.installing;
+                    if (!worker) return;
+                    worker.addEventListener('statechange', () => {
+                        // 今の版が動いている（controller がある）ときだけ「新しい版」と言う
+                        if (worker.state === 'installed' && sw.controller) showUpdateNotice(worker, accept);
+                    });
+                });
+            })
             .catch(err => console.warn('Service Worker を登録できませんでした:', err));
     }
 
@@ -317,7 +356,8 @@
             results: byId('results'),
             taskList: byId('taskList'),
             installPrompt: byId('installPrompt'),
-            installBtn: byId('installBtn')
+            installBtn: byId('installBtn'),
+            updateBanner: byId('updateBanner')
         };
 
         setupTabs();

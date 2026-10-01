@@ -13,6 +13,8 @@
     
     <!-- 見た目と動きは別ファイル（Content-Security-Policy でインラインの style・script を禁止しているため） -->
     <link rel="stylesheet" href="/app.css">
+    <script src="/task_core.js" defer></script>
+    <script src="/store.js" defer></script>
     <script src="/app.js" defer></script>
 </head>
 <body>
@@ -34,8 +36,8 @@
         <!-- タブ（矢印キー・Home・End で移れる。WAI-ARIA のタブの型） -->
         <div class="tabs" role="tablist" aria-label="表示の切り替え">
             <button type="button" class="tab" role="tab" id="tabbtn-parse" aria-controls="tab-parse" aria-selected="true" tabindex="0" data-tab="parse">解析</button>
-            <button type="button" class="tab" role="tab" id="tabbtn-history" aria-controls="tab-history" aria-selected="false" tabindex="-1" data-tab="history">履歴</button>
-            <button type="button" class="tab" role="tab" id="tabbtn-stats" aria-controls="tab-stats" aria-selected="false" tabindex="-1" data-tab="stats">統計</button>
+            <button type="button" class="tab" role="tab" id="tabbtn-mine" aria-controls="tab-mine" aria-selected="false" tabindex="-1" data-tab="mine">本人の番</button>
+            <button type="button" class="tab" role="tab" id="tabbtn-tasks" aria-controls="tab-tasks" aria-selected="false" tabindex="-1" data-tab="tasks">一覧</button>
         </div>
         
         <main>
@@ -61,43 +63,69 @@
                 <div class="card results" id="results">
                     <h2 class="card-title"><span aria-hidden="true">📊</span> 解析結果</h2>
                     <ul class="task-list" id="taskList"></ul>
-                    <button type="button" class="btn btn-success sync-btn" id="syncBtn"><span aria-hidden="true">📅</span> Googleカレンダーに同期</button>
+                    <div class="actions">
+                        <button type="button" class="btn btn-secondary" id="saveBtn"><span aria-hidden="true">💾</span> 端末に保存</button>
+                        <button type="button" class="btn btn-success sync-btn" id="syncBtn"><span aria-hidden="true">📅</span> Googleカレンダーに同期</button>
+                    </div>
+                    <p class="hint">保存はこの端末の中だけです。外部には送りません。</p>
                 </div>
             </section>
             
-            <!-- タブ2: 履歴 -->
-            <section class="tab-content" id="tab-history" role="tabpanel" aria-labelledby="tabbtn-history" tabindex="0" hidden>
+            <!-- タブ2: 本人の番（携帯で見る一覧。本人の番のタスクだけ） -->
+            <section class="tab-content" id="tab-mine" role="tabpanel" aria-labelledby="tabbtn-mine" tabindex="0" hidden>
                 <div class="card">
-                    <h2 class="card-title"><span aria-hidden="true">📜</span> タスク履歴</h2>
-                    <div id="historyList">
-                        <p class="muted">読み込み中...</p>
+                    <h2 class="card-title" id="mineHeading" tabindex="-1"><span aria-hidden="true">🙋</span> 本人の番</h2>
+                    <p class="list-summary" id="mineSummary"></p>
+                    <p class="notice" id="mineNotice" role="status" aria-live="polite"></p>
+                    <ul class="task-list" id="mineList"></ul>
+                </div>
+                <div class="card">
+                    <h2 class="card-title"><span aria-hidden="true">📥</span> Notion の台帳（CSV）を見る</h2>
+                    <div class="field">
+                        <label for="notionCsvInput">Notion から書き出した CSV を選ぶ</label>
+                        <input type="file" id="notionCsvInput" accept=".csv,text/csv" aria-describedby="notionHint">
                     </div>
+                    <p class="hint" id="notionHint">状態が「本人の番」の行だけを表示します。表示するだけで、保存はしません。</p>
+                    <p class="notice" id="notionNotice" role="status" aria-live="polite"></p>
+                    <ul class="task-list" id="notionList"></ul>
                 </div>
             </section>
-            
-            <!-- タブ3: 統計 -->
-            <section class="tab-content" id="tab-stats" role="tabpanel" aria-labelledby="tabbtn-stats" tabindex="0" hidden>
+
+            <!-- タブ3: 一覧（端末に保存したタスク・書き出しと読み込み・レーン名） -->
+            <section class="tab-content" id="tab-tasks" role="tabpanel" aria-labelledby="tabbtn-tasks" tabindex="0" hidden>
                 <div class="card">
-                    <h2 class="card-title"><span aria-hidden="true">📈</span> 統計情報</h2>
-                    <div class="stats" id="statsGrid">
-                        <div class="stat-card">
-                            <div class="stat-number" id="statTotal">-</div>
-                            <div class="stat-label">総タスク数</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number" id="statMonth">-</div>
-                            <div class="stat-label">今月</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number" id="statSynced">-</div>
-                            <div class="stat-label">同期済み</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-number" id="statPending">-</div>
-                            <div class="stat-label">未同期</div>
-                        </div>
+                    <h2 class="card-title" id="tasksHeading" tabindex="-1"><span aria-hidden="true">🗂</span> 保存したタスク</h2>
+                    <p class="notice warning" id="storageWarning" role="status" aria-live="polite"></p>
+                    <p class="list-summary" id="tasksSummary"></p>
+                    <p class="notice" id="tasksNotice" role="status" aria-live="polite"></p>
+                    <ul class="task-list" id="allList"></ul>
+                </div>
+                <div class="card">
+                    <h2 class="card-title"><span aria-hidden="true">📦</span> 書き出し・読み込み</h2>
+                    <div class="actions">
+                        <button type="button" class="btn btn-secondary" id="exportJsonBtn">JSON に書き出す（控え・端末の引っ越し）</button>
+                        <button type="button" class="btn btn-secondary" id="copyMarkdownBtn">台帳の形でコピー（Markdown の表）</button>
+                        <button type="button" class="btn btn-secondary" id="copyCsvBtn">台帳の形でコピー（CSV）</button>
                     </div>
-                    <div id="categoryStats"></div>
+                    <div class="field">
+                        <label for="importJsonInput">書き出した JSON を読み込む</label>
+                        <input type="file" id="importJsonInput" accept=".json,application/json" aria-describedby="importHint">
+                    </div>
+                    <p class="hint" id="importHint">同じタスク（同じ ID）は、更新の新しい方を残します。</p>
+                    <p class="notice" id="ioNotice" role="status" aria-live="polite"></p>
+                    <div class="field" id="copyFallback" hidden>
+                        <label for="copyFallbackText">コピーできなかったので、ここから選んでコピーしてください</label>
+                        <textarea id="copyFallbackText" readonly></textarea>
+                    </div>
+                    <details class="settings">
+                        <summary>レーン名の設定</summary>
+                        <div class="field">
+                            <label for="lanesInput">レーン名（1行に1つ。この端末だけの設定）</label>
+                            <textarea id="lanesInput" class="short"></textarea>
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="saveLanesBtn">レーン名を保存</button>
+                        <p class="notice" id="lanesNotice" role="status" aria-live="polite"></p>
+                    </details>
                 </div>
             </section>
         </main>

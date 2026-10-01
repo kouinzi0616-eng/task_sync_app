@@ -378,6 +378,15 @@ if frontend_dir.exists() and frontend_dir.is_dir():
     async def serve_app_css():
         return _frontend_file("app.css", "text/css")
 
+    # 端末に保存したタスクの計算（台帳の形・状態・JSON の控え）と、保存場所（IndexedDB）（B29）
+    @app.get("/task_core.js")
+    async def serve_task_core_js():
+        return _frontend_file("task_core.js", "application/javascript")
+
+    @app.get("/store.js")
+    async def serve_store_js():
+        return _frontend_file("store.js", "application/javascript")
+
     # 電波が無いときに Service Worker が返すオフライン画面（sw.js が先にキャッシュする）
     @app.get("/offline.html", response_class=HTMLResponse)
     async def serve_offline_page():

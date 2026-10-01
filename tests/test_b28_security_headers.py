@@ -59,6 +59,8 @@ def _assert_security_headers(response, *, with_csp: bool = True):
         "/index.html",
         "/app.js",
         "/app.css",
+        "/task_core.js",
+        "/store.js",
         "/sw.js",
         "/manifest.json",
         "/icon-192.png",

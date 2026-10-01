@@ -59,6 +59,22 @@ TEXT_PAIRS: list[tuple[str, list[str], str]] = [
     (".stat-label", [".stat-card"], "統計の見出し"),
     (".muted", [".card"], "控えめな案内文"),
     (".offline-link", [".card"], "オフライン画面の「もう一度読み込む」"),
+    # B29: 端末に保存したタスク（本人の番・一覧・書き出しと読み込み）
+    (".btn-secondary", [".btn-secondary"], "「端末に保存」「JSON に書き出す」などのボタン"),
+    (".hint", [".card"], "ボタンの下の補足"),
+    (".list-summary", [".card"], "本人の番・一覧の件数"),
+    (".warning", [".warning"], "一時の保存に切り替えたときの注意"),
+    (".badge-lane", [".badge-lane"], "レーンの印"),
+    (".badge-status", [".badge-status"], "状態の印（一覧）"),
+    (".badge-stale", [".badge-stale"], "「2日以上動きなし」の印"),
+    (".task-next", [".task-item"], "Notion の台帳の「本人の番」の欄"),
+    (".field label", [".task-item"], "入力欄の見出し（タスクの中）"),
+    (".field label", [".card"], "入力欄の見出し（カードの上）"),
+    (".field input", [".field input"], "次に本人がすること（入力した文字）"),
+    (".field select", [".field select"], "レーンの選択（選んだ文字）"),
+    (".btn-small", [".btn-small"], "状態を変えるボタン"),
+    (".btn-danger", [".btn-small"], "「削除」ボタン"),
+    (".settings summary", [".card"], "「レーン名の設定」の開閉"),
 ]
 
 # (枠の色を決める規則, 属性, 背景を決める規則（内側 → 外側）, 何の枠か)
@@ -70,6 +86,15 @@ NON_TEXT_PAIRS: list[tuple[str, str, list[str], str]] = [
     (".update-banner button:focus-visible", "outline", [".update-banner"], "「更新する」のフォーカス枠"),
     ("textarea:focus-visible", "outline", [".card"], "入力欄のフォーカス枠"),
     (".offline-link:focus-visible", "outline", [".card"], "リンクのフォーカス枠"),
+    (".btn-small:focus-visible", "outline", [".task-item"], "状態を変えるボタンのフォーカス枠"),
+    (".field input:focus-visible", "outline", [".task-item"], "入力欄（次に本人がすること）のフォーカス枠"),
+    (".field select:focus-visible", "outline", [".task-item"], "レーンの選択のフォーカス枠"),
+    (".settings summary:focus-visible", "outline", [".card"], "「レーン名の設定」のフォーカス枠"),
+    (".card-title:focus-visible", "outline", [".card"], "見出し（状態を変えたあとの移り先）のフォーカス枠"),
+    (".field input", "border", [".task-item"], "入力欄の枠（タスクの中）"),
+    (".field select", "border", [".task-item"], "選択の枠（タスクの中）"),
+    (".btn-small", "border", [".task-item"], "状態を変えるボタンの枠"),
+    (".btn-secondary", "border", [".card"], "白いボタンの枠"),
     ("textarea", "border", [".card"], "入力欄の枠"),
     ("textarea:focus", "border-color", [".card"], "入力中の入力欄の枠"),
 ]

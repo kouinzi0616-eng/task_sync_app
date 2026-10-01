@@ -3,11 +3,16 @@
 // Content-Security-Policy で script-src 'self' にしているので、
 // HTML の中に script を書かず、このファイルから読み込む。
 // 入力や API の応答に由来する文字は textContent で入れる（HTML として解釈させない）。
+// タスクの保存（B29）は端末の中（IndexedDB）だけ。外部には送らない（通信は解析の /api/parse-batch だけ）。
+// 台帳の計算は task_core.js（TaskCore）、保存場所は store.js（TaskStore）。index.html で先に読み込む。
 // ============================================================
 'use strict';
 
 (function () {
     const API_BASE = '';
+    const TaskCore = window.TaskCore;
+    const TaskStore = window.TaskStore;
+    const MAX_FILE_BYTES = 5 * 1024 * 1024;  // 読み込むファイル（JSON・CSV）の上限
     // 期限の種類（API の due_type）の表示名
     const DUE_TYPE_LABELS = {
         exact: '日付',
@@ -43,6 +48,17 @@
     let deferredPrompt = null;
     let busy = false;
     let ui = null;
+
+    // 端末に保存したタスク（B29）
+    const saved = {
+        store: null,       // TaskStore の保存先（IndexedDB か、一時の保存）
+        warning: '',       // 一時の保存に切り替えた理由など
+        tasks: [],
+        lanes: TaskCore ? TaskCore.DEFAULT_LANES.slice() : [],
+        lanesSaved: false, // この端末でレーン名を保存したことがあるか
+        ready: Promise.resolve()
+    };
+    let lastObjectUrl = null;
 
     // 要素を作る（文字は textContent で入れる）
     function create(tag, className, text) {
@@ -243,10 +259,9 @@
             });
             if (moveFocus) tab.focus();
 
-            // 履歴・統計タブを開いたらデータ読み込み
+            // 本人の番・一覧のタブを開いたら、今の時刻で描き直す（2日以上動きなしの印）
             const tabName = tab.dataset.tab;
-            if (tabName === 'history') loadHistory();
-            if (tabName === 'stats') loadStats();
+            if (tabName === 'mine' || tabName === 'tasks') saved.ready.then(renderSaved);
         }
 
         tabs.forEach((tab, index) => {
@@ -264,19 +279,422 @@
         });
     }
 
-    // 履歴読み込み
-    async function loadHistory() {
-        const historyList = document.getElementById('historyList');
-        historyList.replaceChildren(create('p', 'muted', 'データベース機能は実装中...'));
-        // TODO: データベースAPIエンドポイント実装後に有効化（表示は textContent で組み立てる）
+    // ------------------------------------------------------------
+    // 端末に保存したタスク（B29）: 本人の番・一覧・書き出しと読み込み
+    // ------------------------------------------------------------
+
+    const now = () => new Date();
+
+    function statusLabel(status) {
+        return TaskCore.STATUS_LABELS[status] || status;
     }
 
-    // 統計読み込み
-    async function loadStats() {
-        ['statTotal', 'statMonth', 'statSynced', 'statPending'].forEach(id => {
-            document.getElementById(id).textContent = '-';
+    function notify(node, message) {
+        if (node) node.textContent = message;
+    }
+
+    async function loadSaved() {
+        if (!TaskCore || !TaskStore) {
+            saved.warning = '保存の部品（task_core.js・store.js）を読み込めませんでした。読み込み直してください';
+            renderSaved();
+            return;
+        }
+        const opened = await TaskStore.openStore(window);
+        saved.store = opened.store;
+        if (opened.store.kind !== 'indexeddb') {
+            saved.warning = `この端末では一時の保存です（${opened.reason}）。画面を閉じると消えるので、JSON に書き出して控えを取ってください`;
+        }
+        try {
+            saved.tasks = await saved.store.getAll();
+            const lanes = await saved.store.getSetting('lanes');
+            saved.lanesSaved = Array.isArray(lanes);
+            saved.lanes = TaskCore.normalizeLanes(lanes || []);
+        } catch (err) {
+            saved.warning = '保存したタスクを読み込めませんでした';
+        }
+        if (ui.lanesInput) ui.lanesInput.value = saved.lanes.join('\n');
+        renderSaved();
+    }
+
+    function savedDeadline(task) {
+        const text = formatDeadline({ deadline: task.deadline ? `${task.deadline}T00:00:00+09:00` : null });
+        return task.due_time ? `${text} ${task.due_time}` : text;
+    }
+
+    function labelled(text, control, id) {
+        const field = create('div', 'field');
+        const label = create('label', null, text);
+        label.setAttribute('for', id);
+        control.id = id;
+        field.append(label, control);
+        return field;
+    }
+
+    function buildSavedItem(task, where) {
+        const name = task.title;  // 読み上げの名前（aria-label）と知らせの文字にだけ使う。HTML としては入れない
+        const item = create('li', 'task-item saved-item');
+        item.setAttribute('data-id', task.id);
+        const stale = TaskCore.isStale(task, now());
+        if (stale) item.classList.add('task-stale');
+
+        item.appendChild(create('div', 'task-title', task.title));
+        const meta = create('div', 'task-meta');
+        meta.appendChild(create('span', 'badge badge-lane', task.lane));
+        if (where === 'tasks') meta.appendChild(create('span', 'badge badge-status', statusLabel(task.status)));
+        const deadline = create('span', 'deadline');
+        deadline.append(icon('📅'), ` ${savedDeadline(task)}`);
+        meta.appendChild(deadline);
+        if (stale) meta.appendChild(create('span', 'badge badge-stale', '2日以上動きなし'));
+        item.appendChild(meta);
+
+        // 次に本人がすること（入力を終えたら保存。描き直さないので、フォーカスはそのまま）
+        const next = create('input');
+        next.setAttribute('type', 'text');
+        next.setAttribute('maxlength', String(TaskCore.LIMITS.text));
+        next.setAttribute('data-field', 'next_action');
+        next.value = task.next_action || '';
+        next.addEventListener('change', () => editSaved(task.id, { next_action: next.value }, where));
+        item.appendChild(labelled('次に本人がすること', next, `next-${where}-${task.id}`));
+
+        if (where === 'tasks') {
+            const lane = create('select');
+            lane.setAttribute('data-field', 'lane');
+            const names = saved.lanes.includes(task.lane) ? saved.lanes : saved.lanes.concat(task.lane);
+            names.forEach(laneName => {
+                const option = create('option', null, laneName);
+                option.setAttribute('value', laneName);
+                lane.appendChild(option);
+            });
+            lane.value = task.lane;
+            lane.addEventListener('change', () => editSaved(task.id, { lane: lane.value }, where));
+            item.appendChild(labelled('レーン', lane, `lane-${where}-${task.id}`));
+        }
+
+        // 状態を変えるボタン（今の状態以外の3つ）
+        const controls = create('div', 'task-controls');
+        controls.setAttribute('role', 'group');
+        controls.setAttribute('aria-label', `「${name}」の状態（今は${statusLabel(task.status)}）`);
+        TaskCore.STATUSES.filter(status => status !== task.status).forEach(status => {
+            const button = create('button', 'btn-small', `${statusLabel(status)}にする`);
+            button.setAttribute('type', 'button');
+            button.setAttribute('data-status', status);
+            button.setAttribute('aria-label', `「${name}」を${statusLabel(status)}にする`);
+            button.addEventListener('click', () => changeStatus(task.id, status, where));
+            controls.appendChild(button);
         });
-        // TODO: データベースAPIエンドポイント実装後に有効化
+        if (where === 'tasks') {
+            const remove = create('button', 'btn-small btn-danger', '削除');
+            remove.setAttribute('type', 'button');
+            remove.setAttribute('aria-label', `「${name}」を削除`);
+            remove.addEventListener('click', () => removeSaved(task.id));
+            controls.appendChild(remove);
+        }
+        item.appendChild(controls);
+        return item;
+    }
+
+    // 本人の番の一覧（携帯で見る画面）
+    function renderMine() {
+        const at = now();
+        const mine = TaskCore.myTurnList(saved.tasks, at);
+        const staleCount = mine.filter(task => TaskCore.isStale(task, at)).length;
+        ui.mineList.replaceChildren(...mine.map(task => buildSavedItem(task, 'mine')));
+        notify(ui.mineSummary, mine.length
+            ? `本人の番は ${mine.length}件です${staleCount ? `（2日以上動きなし ${staleCount}件）` : ''}`
+            : '本人の番のタスクはありません。「一覧」で「本人の番にする」を押すと、ここに出ます');
+    }
+
+    // 保存したタスクの全部
+    function renderAll() {
+        const all = TaskCore.sortTasks(saved.tasks);
+        ui.allList.replaceChildren(...all.map(task => buildSavedItem(task, 'tasks')));
+        const counts = TaskCore.STATUSES.map(status => `${statusLabel(status)} ${all.filter(t => t.status === status).length}`);
+        notify(ui.tasksSummary, all.length
+            ? `${all.length}件（${counts.join('・')}）`
+            : 'まだありません。「解析」で解析して「端末に保存」を押すと、ここに出ます');
+    }
+
+    function renderSaved() {
+        if (!ui) return;
+        notify(ui.storageWarning, saved.warning);
+        if (!TaskCore) return;
+        renderMine();
+        renderAll();
+    }
+
+    function noticeFor(where) {
+        return where === 'mine' ? ui.mineNotice : ui.tasksNotice;
+    }
+
+    // 1件を直して保存する。変わらなければ null
+    async function updateSaved(id, changes, where) {
+        const index = saved.tasks.findIndex(task => task.id === id);
+        if (index < 0) return null;
+        let next;
+        try {
+            next = TaskCore.applyChange(saved.tasks[index], changes, now());
+        } catch (err) {
+            notify(noticeFor(where), err.message);
+            return null;
+        }
+        if (next === saved.tasks[index]) return null;
+        // 先に手元の値を新しくする（入力の直後に状態のボタンを押しても、前の変更を消さない）
+        const previous = saved.tasks[index];
+        saved.tasks[index] = next;
+        try {
+            await saved.store.put(next);
+        } catch (err) {
+            if (saved.tasks[index] === next) saved.tasks[index] = previous;
+            notify(noticeFor(where), '保存できませんでした。もう一度試してください');
+            return null;
+        }
+        return next;
+    }
+
+    // 次に本人がすること・レーン: 今の一覧は描き直さず（入力中のフォーカスを保つ）、印だけを外す
+    async function editSaved(id, changes, where) {
+        const next = await updateSaved(id, changes, where);
+        if (!next) return;
+        const list = where === 'mine' ? ui.mineList : ui.allList;
+        const item = list.querySelector(`[data-id="${id}"]`);
+        if (item) {
+            item.classList.remove('task-stale');
+            const badge = item.querySelector('.badge-stale');
+            if (badge) badge.remove();
+        }
+        if (where === 'mine') renderAll();
+        else renderMine();
+        notify(noticeFor(where), `「${next.title}」を保存しました`);
+    }
+
+    async function changeStatus(id, status, where) {
+        const next = await updateSaved(id, { status }, where);
+        if (!next) return;
+        renderSaved();
+        notify(noticeFor(where), `「${next.title}」を${statusLabel(status)}にしました`);
+        // 同じ一覧に残っていれば、そのタスクの最初のボタンへ。消えたら見出しへ
+        const list = where === 'mine' ? ui.mineList : ui.allList;
+        const item = list.querySelector(`[data-id="${id}"]`);
+        const target = item ? item.querySelector('button') : (where === 'mine' ? ui.mineHeading : ui.tasksHeading);
+        if (target) target.focus();
+    }
+
+    async function removeSaved(id) {
+        const task = saved.tasks.find(t => t.id === id);
+        if (!task) return;
+        const name = task.title;
+        if (!window.confirm(`「${name}」を削除しますか。元に戻せません`)) return;
+        try {
+            await saved.store.remove(id);
+        } catch (err) {
+            notify(ui.tasksNotice, '削除できませんでした');
+            return;
+        }
+        saved.tasks = saved.tasks.filter(t => t.id !== id);
+        renderSaved();
+        notify(ui.tasksNotice, `「${name}」を削除しました`);
+        if (ui.tasksHeading) ui.tasksHeading.focus();
+    }
+
+    // 解析の結果を端末に保存する（一度保存した行は、もう一度は保存しない）。保存したタスクを返す
+    async function saveParsed() {
+        await saved.ready;
+        if (!saved.store) {
+            showError(saved.warning || '保存できません');
+            return [];
+        }
+        const rows = parsedTasks.filter(row => row.ok !== false && !row.savedId);
+        const at = now();
+        const created = [];
+        let skipped = 0;
+        rows.forEach(row => {
+            try {
+                const task = TaskCore.createTask(row, { id: TaskCore.newUuid(window.crypto), now: at, lane: saved.lanes[0] });
+                row.savedId = task.id;
+                created.push(task);
+            } catch (err) {
+                skipped += 1;  // 件名の無い行など
+            }
+        });
+        if (created.length === 0) {
+            showSuccess(parsedTasks.some(row => row.savedId) ? 'この結果は、もう端末に保存してあります' : '保存できるタスクがありません');
+            return [];
+        }
+        try {
+            await saved.store.putMany(created);
+        } catch (err) {
+            created.forEach(task => { const row = parsedTasks.find(r => r.savedId === task.id); if (row) delete row.savedId; });
+            showError('端末に保存できませんでした');
+            return [];
+        }
+        saved.tasks = saved.tasks.concat(created);
+        renderSaved();
+        TaskStore.requestPersistence(window);
+        const note = saved.store.kind === 'indexeddb' ? '' : '（一時の保存です。画面を閉じると消えます）';
+        showSuccess(`${created.length}件を端末に保存しました${skipped ? `（件名の無い${skipped}件は保存していません）` : ''}。`
+            + `「本人の番」「一覧」で状態を変えられます${note}`);
+        return created;
+    }
+
+    function fileStamp(at) {
+        return TaskCore.jstDate(at).replace(/-/g, '');
+    }
+
+    // ファイルとして保存する（ブラウザの中で作る。送信はしない）
+    function downloadText(filename, text, type) {
+        if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
+        lastObjectUrl = URL.createObjectURL(new Blob([text], { type }));
+        const link = create('a');
+        link.setAttribute('href', lastObjectUrl);
+        link.setAttribute('download', filename);
+        link.hidden = true;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    }
+
+    async function exportJson() {
+        await saved.ready;
+        if (!saved.tasks.length) {
+            notify(ui.ioNotice, '保存したタスクがありません');
+            return;
+        }
+        const at = now();
+        const backup = TaskCore.makeBackup(TaskCore.sortTasks(saved.tasks), { lanes: saved.lanes }, at);
+        const filename = `task-sync-${fileStamp(at)}.json`;
+        downloadText(filename, JSON.stringify(backup, null, 2) + '\n', 'application/json');
+        notify(ui.ioNotice, `${saved.tasks.length}件を ${filename} に書き出しました`);
+    }
+
+    async function readChosenFile(input, notice) {
+        const file = input.files && input.files[0];
+        if (!file) return null;
+        if (file.size > MAX_FILE_BYTES) {
+            notify(notice, 'ファイルが大きすぎます（5MB まで）');
+            return null;
+        }
+        try {
+            return await file.text();
+        } catch (err) {
+            notify(notice, 'ファイルを読めませんでした');
+            return null;
+        }
+    }
+
+    async function importJson() {
+        await saved.ready;
+        const text = await readChosenFile(ui.importJsonInput, ui.ioNotice);
+        ui.importJsonInput.value = '';  // 同じファイルをもう一度選べるように
+        if (text === null) return;
+        let read;
+        try {
+            read = TaskCore.readBackup(text);
+        } catch (err) {
+            notify(ui.ioNotice, err.message);
+            return;
+        }
+        const merged = TaskCore.mergeTasks(saved.tasks, read.tasks);
+        try {
+            await saved.store.putMany(merged.changed);
+            if (read.lanes && !saved.lanesSaved) {
+                await saved.store.setSetting('lanes', read.lanes);
+                saved.lanes = read.lanes;
+                saved.lanesSaved = true;
+                ui.lanesInput.value = saved.lanes.join('\n');
+            }
+        } catch (err) {
+            notify(ui.ioNotice, '読み込んだタスクを保存できませんでした');
+            return;
+        }
+        saved.tasks = merged.tasks;
+        renderSaved();
+        notify(ui.ioNotice, `読み込みました: 足した ${merged.added}件・新しくした ${merged.updated}件・そのまま ${merged.unchanged}件`
+            + (read.invalid ? `（読めなかった ${read.invalid}件は飛ばしました）` : ''));
+    }
+
+    async function copyLedger(kind) {
+        await saved.ready;
+        ui.copyFallback.hidden = true;
+        if (!saved.tasks.length) {
+            notify(ui.ioNotice, '保存したタスクがありません');
+            return;
+        }
+        const rows = TaskCore.toLedgerRows(TaskCore.sortTasks(saved.tasks));
+        const text = kind === 'csv' ? TaskCore.toCsv(rows) : TaskCore.toMarkdownTable(rows);
+        const what = kind === 'csv' ? 'CSV' : 'Markdown の表';
+        try {
+            if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') throw new Error('no clipboard');
+            await navigator.clipboard.writeText(text);
+            notify(ui.ioNotice, `${rows.length}件を台帳の形（${what}）でコピーしました`);
+        } catch (err) {
+            // http の LAN などクリップボードが使えないときは、選んでコピーできる欄に出す
+            ui.copyFallbackText.value = text;
+            ui.copyFallback.hidden = false;
+            ui.copyFallbackText.focus();
+            ui.copyFallbackText.select();
+            notify(ui.ioNotice, `自動ではコピーできませんでした。下の欄の${what}を選んでコピーしてください`);
+        }
+    }
+
+    function buildNotionItem(row) {
+        const item = create('li', 'task-item');
+        if (row.stale) item.classList.add('task-stale');
+        item.appendChild(create('div', 'task-title', row.title));
+        const meta = create('div', 'task-meta');
+        if (row.lane) meta.appendChild(create('span', 'badge badge-lane', row.lane));
+        if (row.updated) meta.appendChild(create('span', 'deadline', `更新日 ${row.updated}`));
+        if (row.stale) meta.appendChild(create('span', 'badge badge-stale', '2日以上動きなし'));
+        if (row.turn_missing) meta.appendChild(create('span', 'badge badge-review', '本人の番の欄が空'));
+        item.appendChild(meta);
+        if (row.next_action) item.appendChild(create('div', 'task-next', `本人の番: ${row.next_action}`));
+        return item;
+    }
+
+    async function showNotionCsv() {
+        const text = await readChosenFile(ui.notionCsvInput, ui.notionNotice);
+        if (text === null) return;
+        let result;
+        try {
+            result = TaskCore.readNotionCsv(text, now());
+        } catch (err) {
+            ui.notionList.replaceChildren();
+            notify(ui.notionNotice, err.message);
+            return;
+        }
+        ui.notionList.replaceChildren(...result.items.map(buildNotionItem));
+        const stale = result.items.filter(row => row.stale).length;
+        notify(ui.notionNotice, `全 ${result.total}行のうち、本人の番は ${result.items.length}行です`
+            + (stale ? `（2日以上動きなし ${stale}行）` : ''));
+    }
+
+    async function saveLanes() {
+        await saved.ready;
+        const lanes = TaskCore.normalizeLanes(ui.lanesInput.value);
+        try {
+            await saved.store.setSetting('lanes', lanes);
+        } catch (err) {
+            notify(ui.lanesNotice, 'レーン名を保存できませんでした');
+            return;
+        }
+        saved.lanes = lanes;
+        saved.lanesSaved = true;
+        ui.lanesInput.value = lanes.join('\n');
+        renderSaved();
+        notify(ui.lanesNotice, `レーン名を保存しました（${lanes.join('・')}）`);
+    }
+
+    function setupSaved() {
+        ui.saveBtn.addEventListener('click', saveParsed);
+        ui.exportJsonBtn.addEventListener('click', exportJson);
+        ui.importJsonInput.addEventListener('change', importJson);
+        ui.copyMarkdownBtn.addEventListener('click', () => copyLedger('markdown'));
+        ui.copyCsvBtn.addEventListener('click', () => copyLedger('csv'));
+        ui.notionCsvInput.addEventListener('change', showNotionCsv);
+        ui.saveLanesBtn.addEventListener('click', saveLanes);
+        saved.ready = loadSaved().catch(() => {
+            saved.warning = '保存したタスクを読み込めませんでした';
+            renderSaved();
+        });
     }
 
     // ------------------------------------------------------------
@@ -357,11 +775,35 @@
             taskList: byId('taskList'),
             installPrompt: byId('installPrompt'),
             installBtn: byId('installBtn'),
-            updateBanner: byId('updateBanner')
+            updateBanner: byId('updateBanner'),
+            saveBtn: byId('saveBtn'),
+            mineHeading: byId('mineHeading'),
+            mineSummary: byId('mineSummary'),
+            mineNotice: byId('mineNotice'),
+            mineList: byId('mineList'),
+            notionCsvInput: byId('notionCsvInput'),
+            notionNotice: byId('notionNotice'),
+            notionList: byId('notionList'),
+            tasksHeading: byId('tasksHeading'),
+            storageWarning: byId('storageWarning'),
+            tasksSummary: byId('tasksSummary'),
+            tasksNotice: byId('tasksNotice'),
+            allList: byId('allList'),
+            exportJsonBtn: byId('exportJsonBtn'),
+            copyMarkdownBtn: byId('copyMarkdownBtn'),
+            copyCsvBtn: byId('copyCsvBtn'),
+            importJsonInput: byId('importJsonInput'),
+            ioNotice: byId('ioNotice'),
+            copyFallback: byId('copyFallback'),
+            copyFallbackText: byId('copyFallbackText'),
+            lanesInput: byId('lanesInput'),
+            saveLanesBtn: byId('saveLanesBtn'),
+            lanesNotice: byId('lanesNotice')
         };
 
         setupTabs();
         ui.parseBtn.addEventListener('click', onParse);
+        setupSaved();
 
         // 同期ボタン
         ui.syncBtn.addEventListener('click', () => {

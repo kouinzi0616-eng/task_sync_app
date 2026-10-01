@@ -282,6 +282,11 @@ export class FakeElement extends FakeNode {
         this.ownerDocument.activeElement = this;
     }
 
+    // 入力欄の文字をすべて選ぶ（コピーの控えの欄で使う）
+    select() {
+        this.ownerDocument.selectedElement = this;
+    }
+
     click() {
         this.dispatchEvent(new FakeEvent('click', { bubbles: true }));
     }

@@ -6,7 +6,7 @@
 // ============================================================
 //
 // 方針（B28）
-// - 画面の本体（/・/index.html・/app.js・/app.css・/manifest.json）はネット優先。
+// - 画面の本体（/・/index.html・/app.js・/task_core.js・/store.js・/app.css・/manifest.json）はネット優先。
 //   取れたらキャッシュを新しくし、電波が無いときだけキャッシュ（控え）を返す。
 // - アイコンはキャッシュ優先（めったに変わらない）。
 // - API（/api/）はキャッシュしない。電波が無いときは { offline: true } の 503 を返す。
@@ -18,7 +18,7 @@
 // PRECACHE_URLS のファイルを変えたら、この番号を 1 つ上げる。
 // 上げ忘れは tests/test_b28_service_worker.py が見つける。
 // 番号を上げたら python scripts/sw_version.py --update で記録（tests/fixtures/sw_precache.json）を作り直す。
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const CACHE_PREFIX = 'task-sync-';
 const CACHE_NAME = `${CACHE_PREFIX}v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
@@ -28,6 +28,8 @@ const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/app.js',
+  '/task_core.js',
+  '/store.js',
   '/app.css',
   '/offline.html',
   '/manifest.json',
@@ -38,7 +40,9 @@ const PRECACHE_URLS = [
 ];
 
 // ネット優先で取りに行くもの（画面の本体）。ほかの PRECACHE_URLS（アイコン）はキャッシュ優先
-const NETWORK_FIRST_PATHS = new Set(['/', '/index.html', '/app.js', '/app.css', '/manifest.json', OFFLINE_URL]);
+const NETWORK_FIRST_PATHS = new Set([
+  '/', '/index.html', '/app.js', '/task_core.js', '/store.js', '/app.css', '/manifest.json', OFFLINE_URL
+]);
 
 // offline.html もキャッシュに無いときの、最後の控え（決まった文言だけ）
 const OFFLINE_FALLBACK_HTML =

@@ -386,13 +386,15 @@ if frontend_dir.exists() and frontend_dir.is_dir():
     async def serve_sw():
         return _frontend_file("sw.js", "application/javascript")
     
-    # アイコン（複数サイズ対応）
+    # アイコン（any 用 192・512 と、端まで塗った maskable 用 192・512）
+    ICON_NAMES = frozenset({"192", "512", "maskable-192", "maskable-512"})
+
     @app.get("/icon-{size}.png")
     async def serve_icon(size: str):
         icon_path = frontend_dir / f"icon-{size}.png"
-        if icon_path.exists():
+        if size in ICON_NAMES and icon_path.is_file():
             return FileResponse(icon_path, media_type="image/png")
-        raise HTTPException(status_code=404, detail=f"icon-{size}.png not found")
+        raise HTTPException(status_code=404, detail="icon not found")
     
     # Apple Touch Icon（iOS対応）
     @app.get("/apple-touch-icon.png")

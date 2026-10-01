@@ -94,6 +94,11 @@ Python の版は、リポジトリの `.python-version`（中身は `3.12`）で
 アプリが読む環境変数は `.env.example` にまとめています。
 API の説明ページ（`/docs`）は既定で出さないので、公開サービスでは `ENABLE_API_DOCS` を設定しないでください。
 
+**カテゴリの設定（`CATEGORY_CONFIG_JSON`）**: リポジトリには見本のカテゴリ（仕事・学び・地域・暮らし）しか置いていません。
+実際に使うカテゴリ名と判定語は、環境変数 `CATEGORY_CONFIG_JSON` に1行の JSON で設定します。
+作り方・確かめ方は README の「カテゴリの設定」を見てください。設定したあと、`/api/health` の `category_config.source` が `env` になっていれば読めています。
+設定しないと見本のカテゴリになります。
+
 ### 2-5. デプロイ開始
 
 1. 「Create Web Service」をクリック

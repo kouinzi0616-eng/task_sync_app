@@ -3,6 +3,7 @@
 - 画面: 前の同期ボタン・存在しない GOOGLE_CALENDAR_SETUP.md を案内する alert が無い。OAuth・Google の API を使わない
 - API: POST /api/sync-calendar は本文を読まずに 501 を返す（カレンダーへの登録はサーバーでしない）
 - 動き（.ics を保存する・UID は固定の ID・完了と期限なしは入れない）は tests/frontend/app_checks.mjs の「ics:」
+- README に calendar_client.py を使わない理由と、task_id のハッシュによる二重登録の説明がある
 データはすべて架空。外部には送信しない。
 """
 from __future__ import annotations
@@ -80,6 +81,14 @@ def test_ics_script_is_served_and_precached(client):
     assert response.content == (FRONTEND / "ics.js").read_bytes()
     sw = (FRONTEND / "sw.js").read_text(encoding="utf-8")
     assert "'/ics.js'" in sw
+
+
+def test_readme_explains_why_calendar_client_is_not_used():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    section = readme.split("## カレンダー用ファイル（.ics）", 1)[1].split("\n## ", 1)[0]
+    for words in ("calendar_client.py", "InstalledAppFlow", "https://www.googleapis.com/auth/calendar", "task_id",
+                  "二重に登録", "UID", "ファイルの扱い（決めたこと）", "未確認"):
+        assert words in section, words
 
 
 @pytest.mark.skipif(NODE is None, reason="node が無い（画面の動きの確認は飛ばす）")

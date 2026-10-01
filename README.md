@@ -7,7 +7,7 @@
 - タスクを1行ずつ貼り付けると、行ごとに「題名・期限・カテゴリ」と、期限をどう読んだか・要確認の印を表示します。
 - カテゴリはキーワードで4つ（寺院関係・所属団体2つ・個人）に分けます。どれにも当たらなければ「個人」です。
 - 解析したタスクを、**この端末の中**（ブラウザの IndexedDB）に保存できます。サーバーには保存しません（下の「端末に保存したタスク」）。
-- Google カレンダーへの登録は、まだ画面からはできません（`/api/sync-calendar` は未実装の応答を返します）。
+- 期限のあるタスクを、カレンダー用ファイル（.ics）にして保存できます。カレンダーのアプリで読み込みます（下の「カレンダー用ファイル（.ics）」）。
 
 ## 端末に保存したタスク（本人の番）
 保存の方針（なぜ端末の中か・Render の無料枠との比較）は [docs/storage.md](docs/storage.md) にあります。
@@ -24,8 +24,31 @@
   1行目に「件名」と「状態」の列が要ります。更新日が2日以上前なら印を付けます。Notion の書き出しの日付の形は未確認です。
 - レーン名は「一覧」の「レーン名の設定」で変えられます（この端末だけ）。公開しているコードには見本の名前（仕事・学び・暮らし）だけを置いています。
 - **外部には送りません。** 保存・書き出し・コピーはブラウザの中だけで行います（テスト `tests/test_b29_no_network.py` で、通信の書き方が増えていないことを確かめます）。
-- ブラウザの「サイトのデータを消す」や、Safari で 7 日間開かないことなどで消えることがあります。ときどき JSON に書き出して控えを取ってください。
+- ブラウザの「サイトのデータを消す」や、Safari でこのサイトを 7 日間（Safari を使った日で数えて）操作しないことなどで消えることがあります。ときどき JSON に書き出して控えを取ってください。
 - 計算（状態・印・台帳の形・CSV・JSON）は `frontend/task_core.js`、保存場所は `frontend/store.js` です。
+
+## カレンダー用ファイル（.ics）
+- 「解析」の結果の「**カレンダー用ファイルを保存**」で、期限のあるタスクを .ics ファイルにします。
+  先に端末に保存して固定の ID を振り、その ID を予定の UID（予定を見分ける番号）にします。
+  「一覧」の同じボタンでは、期限のある未完了のタスクをまとめて書き出します。期限の無いもの・完了は入れません。
+- 予定は**終日**です（期限の日だけ。時刻は説明欄に書きます）。RFC 5545（.ics の決まり）に沿って、1行 75 オクテットで折り返し、改行は CRLF にします。
+- UID は題名や期限を直しても変わりません。読み込み直したとき、同じ UID の予定を上書きするか、別に足すかは**カレンダーのアプリ次第**です。
+  Google カレンダーは上書きするという二次情報（例: https://addcal.co/blog/how-to-add-an-ics-file-to-google-calendar 、検索の抜粋で確認・2026-10-01）がありますが、公式の説明はこの環境から開けず**未確認**です。iPhone・Windows の実機でも未確認です。
+- 外部への送信も、OAuth（Google のログイン）も、鍵もありません。ファイルはブラウザの中で作ります。
+- `POST /api/sync-calendar` は使いません（501 を返します）。作るのは `frontend/ics.js`、検算は `tests/frontend/ics.test.mjs` と `tests/test_b30_ics.py`（icalendar で読めることを確かめます）です。
+
+### 前のカレンダー同期（`backend/task_sync/calendar_client.py`）を使わない理由
+- **手元の PC 向けの認証です。** `credentials.json` と `token.json` をファイルで持ち、その PC でブラウザを開いて許可する形（`InstalledAppFlow`）なので、Render のサーバーでは動きません。
+- **権限が広すぎます。** `https://www.googleapis.com/auth/calendar` を求めます。Google の説明では「See, edit, share, and permanently delete all the calendars you can access using Google Calendar」（見られるすべてのカレンダーの閲覧・編集・共有・完全な削除）です。期限の目印を足すだけには要りません（出典: google-api-python-client に入っている Calendar API の説明 `discovery_cache/documents/calendar.v3.json`、revision 20260708。2026-10-01 に確認）。
+- **予定が二重に登録されます。** 重なりを防ぐ `task_id` は「カテゴリ・題名・期限日」のハッシュ（sha256 の先頭 16 文字）です。
+  期限や題名を直すと別の値になり、前の予定を見つけられずに新しい予定を足します（前の予定は残ります）。カテゴリの判定が変わったときも同じです。
+  探す範囲も「今日の 30 日前〜180 日後」だけなので、その外の予定も見つけられません。逆に、カテゴリ・題名・期限日が同じ別のタスクは同じ値になり、1つにまとまってしまいます。
+  （期限や題名を変えると `task_id` が変わることは `tests/test_b30_ics.py` で記録しています）
+- .ics の UID は最初に振った固定の ID（UUID）なので、この問題がありません。
+
+**ファイルの扱い（決めたこと）**: `calendar_client.py`・`sync.py` は、削除も docs/ への移動もせず、今の場所に残します。Web アプリ（`backend/api.py`）からは使いません。
+- 理由: 手元の PC で試すときの部品として動く形のまま残せること、テスト（`tests/test_task_sync.py`）があること、依存（`requirements-calendar.txt`）は本番に入れていないこと。削除は git の履歴から戻せますが、作者のコードなので、消すかどうかは作者が決めるのがよいと考えました。
+- 消すときは、`backend/task_sync/sync.py`・`requirements-calendar.*`・CI（`.github/workflows/ci.yml`）の依存・`.claude/hooks/session-start.sh`・`tests/test_task_sync.py` の該当テスト・この節を一緒に直します。
 
 ## 期限の書き方
 行の中に、丸括弧で期限を書きます。例: `資料作り (3/15まで)` → 題名「資料作り」・期限 3/15。
@@ -96,7 +119,7 @@
 画面は「読み取り: 「3/15まで」→ 2027年3月15日（日付）」のように、どの表現をどう読んだかと、要確認・期限切れの印を出します。
 
 ## 画面の安全と見やすさ
-- 画面の JS と CSS は `frontend/app.js`・`frontend/app.css` に分けています。HTML の中に script や style は書きません。
+- 画面の JS と CSS は `frontend/app.js`（ほかに `task_core.js`・`store.js`・`ics.js`）・`frontend/app.css` に分けています。HTML の中に script や style は書きません。
 - 入力や API の応答の文字は `textContent` で表示します。`innerHTML` などで HTML として入れることはしません。
 - すべての応答に、次のヘッダを付けます（`backend/api.py` の `SECURITY_HEADERS`）。
   - `Content-Security-Policy`: 自分のサーバーの JS・CSS だけを動かします（`script-src 'self'`）。ほかのサイトの枠（iframe）には入れさせません（`frame-ancestors 'none'`）。
@@ -104,7 +127,7 @@
   - `ENABLE_API_DOCS=1` のときの `/docs`・`/redoc` だけは CSP を付けません（外部の JS を使うため）。
 
 ### オフラインと新しい版（Service Worker）
-- 画面（`/`・`index.html`・`app.js`・`app.css`）は**ネット優先**です。つながらないときだけ、最後に取れた版（キャッシュ）を使います。
+- 画面（`/`・`index.html`・`app.js`・`task_core.js`・`store.js`・`ics.js`・`app.css`）は**ネット優先**です。つながらないときだけ、最後に取れた版（キャッシュ）を使います。
 - 開けるものが何も無いときは、オフライン画面（`offline.html`）を出します。解析は電波のあるときだけできます。
 - 新しい版が届くと、画面の上に「新しい版があります」と出ます。「更新する」を押すと切り替わります。
 - **画面のファイルを変えたら**、`frontend/sw.js` の `CACHE_VERSION` を1つ上げて、`python scripts/sw_version.py --update` を実行します。
@@ -149,8 +172,8 @@ GitHub では push と PR のたびに、同じ検証が Python 3.11 / 3.12 / 3.
 | ファイル | 用途 |
 |----------|------|
 | `requirements.txt` | 本番（Render）が読む、版を固定した依存。`requirements.in` から作る |
-| `requirements-dev.txt` | テスト・lint 用（pytest・httpx2・ruff） |
-| `requirements-calendar.txt` | Google カレンダー連携の部品（`backend/task_sync/`）用。画面と API には不要 |
+| `requirements-dev.txt` | テスト・lint 用（pytest・httpx2・ruff・icalendar） |
+| `requirements-calendar.txt` | Google カレンダー連携の部品（`backend/task_sync/calendar_client.py`）用。画面と API には不要（Web アプリは使わない。上の「カレンダー用ファイル（.ics）」） |
 
 依存を足すときは `.in` ファイルを直して、先頭に書いてあるコマンドで `.txt` を作り直します。
 

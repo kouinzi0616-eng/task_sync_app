@@ -12,7 +12,7 @@ AI エージェント（Claude Code・Codex など）と人が最初に読む短
 | `backend/api.py` | FastAPI 本体。画面（frontend/）も配信する。Render は `uvicorn backend.api:app` で起動 |
 | `backend/date_parser.py` | 期限解析の薄い互換層（JST の今日を基準日にし、期限を JST 0:00 にする）。読み方の正本は `backend/task_sync/date_rules.py` |
 | `backend/category_classifier.py`・`backend/models.py` | カテゴリ分類とデータの形 |
-| `backend/task_sync/` | 期限解析の正本（`date_rules.py`）、急ぎの規則ベース検出（`urgency.py`。画面・API にはまだつないでいない）、カレンダー同期用の解析・同期の部品（Google の依存は `requirements-calendar.txt`） |
+| `backend/task_sync/` | 期限解析の正本（`date_rules.py`）、急ぎの規則ベース検出（`urgency.py`。画面・API にはまだつないでいない）、カレンダー同期用の解析・同期の部品（Google の依存は `requirements-calendar.txt`。Web アプリからは使わない。カレンダーへは画面の .ics（`frontend/ics.js`）で入れる） |
 | `docs/storage.md` | 保存の方針。タスクは画面が端末の中（IndexedDB）に保存し、サーバーは保存しない（`backend/database.py` は B29 で削除） |
 | `frontend/` | PWA（index.html・app.js・app.css・offline.html・sw.js・manifest.json・アイコン）。CSP があるので HTML にインラインの script・style は書かない。タスクの保存は端末の中だけ（`store.js` が IndexedDB、`task_core.js` が台帳の計算）。外部への通信は足さない（`tests/test_b29_no_network.py`） |
 | `tests/` | pytest。`labs/` ができたら、そこのテストも一緒に回る。`tests/frontend/` は node で app.js・sw.js を動かす偽 DOM（node が無ければ飛ばす） |

@@ -62,6 +62,7 @@ def test_node_is_new_enough():
     ("prefix", "minimum"),
     [
         ("xss:", 10),  # HTML を混ぜた架空の応答を文字のまま出す
+        ("category:", 9),  # B27: カテゴリの印の色の番号・判定の理由（当たった語）
         ("notice:", 3),  # エラーは role=alert に出し、タイマーで消さない
         ("loading:", 5),  # 解析中の知らせ・aria-disabled
         ("error:", 4),  # 422・オフライン・500

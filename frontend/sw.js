@@ -18,7 +18,7 @@
 // PRECACHE_URLS のファイルを変えたら、この番号を 1 つ上げる。
 // 上げ忘れは tests/test_b28_service_worker.py が見つける。
 // 番号を上げたら python scripts/sw_version.py --update で記録（tests/fixtures/sw_precache.json）を作り直す。
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
 const CACHE_PREFIX = 'task-sync-';
 const CACHE_NAME = `${CACHE_PREFIX}v${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';

@@ -140,8 +140,8 @@ async function xssIsShownAsText() {
     check('xss: 読み取りの括弧の中身も文字のまま',
         items[0] && items[0].querySelector('.task-reading').textContent.includes(rows[0].due_raw));
     check('xss: 注意も文字のまま', items[0] && items[0].querySelector('.task-note').textContent.includes(XSS_SCRIPT));
-    check('xss: 知らないカテゴリは個人の色で文字のまま',
-        items[1] && items[1].querySelector('.badge').className === 'badge badge-personal'
+    check('xss: 色の番号が無いカテゴリは色 0 で、名前は文字のまま',
+        items[1] && items[1].querySelector('.badge').className === 'badge badge-cat-0'
         && items[1].querySelector('.badge').textContent === XSS_IMG);
     check('xss: 解析できなかった行の題名と理由も文字のまま',
         items[2] && items[2].querySelector('.task-title').textContent === XSS_SCRIPT
@@ -154,6 +154,40 @@ async function xssIsShownAsText() {
     check('xss: 要確認の印と行の色', items[0] && items[0].classList.contains('task-review')
         && items[0].textContent.includes('要確認'));
     check('xss: 知らせを消すタイマーを使わない', env.timers.length === 0, `timers=${env.timers.length}`);
+}
+
+// ------------------------------------------------------------
+// 1b. カテゴリの印の色（category_color）と、判定の理由（category_hits）（B27）
+// ------------------------------------------------------------
+async function categoryReason() {
+    const base = { raw_text: '', warnings: [], due_type: 'none', due_raw: '', due_time: null, needs_review: false, overdue: false, deadline: null };
+    const rows = [
+        { ...base, ok: true, title: '架空の会議資料', category: '仕事', category_color: 1, category_hits: ['会議', XSS_IMG] },
+        { ...base, ok: true, title: '架空のメモ', category: '暮らし', category_color: 4, category_hits: [] },
+        { ...base, ok: true, title: '架空の番号違い', category: '学び', category_color: 9, category_hits: ['練習'] },
+        { ...base, ok: true, title: '架空の文字の番号', category: '地域', category_color: '2', category_hits: null },
+        { ...base, ok: false, title: '架空の失敗', category: null, category_color: null, category_hits: [], error: '解析できませんでした', needs_review: true }
+    ];
+    const env = setup({ fetchImpl: async () => jsonResponse(200, rows) });
+    env.$('taskInput').value = rows.map(row => row.title).join('\n');
+    env.$('parseBtn').click();
+    await flush();
+    const items = env.$('taskList').children;
+    const badge = i => items[i] && items[i].querySelector('.badge');
+    const reason = i => items[i] && items[i].querySelector('.task-reason');
+    check('category: 色の番号の印', badge(0) && badge(0).className === 'badge badge-cat-1' && badge(0).textContent === '仕事',
+        badge(0) && badge(0).className);
+    check('category: 当たった語を理由に出す', reason(0) && reason(0).textContent === `カテゴリの理由: 「会議」「${XSS_IMG}」`,
+        reason(0) && reason(0).textContent);
+    check('category: 理由の語も文字のまま（要素を作らない）',
+        !env.document.createdTags.includes('IMG') && env.document.htmlSinkUses.length === 0);
+    check('category: 当たった語が無ければ、決まりのカテゴリと書く',
+        reason(1) && reason(1).textContent === 'カテゴリの理由: 当てはまる語が無いので「暮らし」', reason(1) && reason(1).textContent);
+    check('category: 色 4', badge(1) && badge(1).className === 'badge badge-cat-4');
+    check('category: 1〜6 以外の番号は色 0', badge(2) && badge(2).className === 'badge badge-cat-0', badge(2) && badge(2).className);
+    check('category: 文字の番号も色 0', badge(3) && badge(3).className === 'badge badge-cat-0', badge(3) && badge(3).className);
+    check('category: 当たった語が null でも動く', reason(3) && reason(3).textContent === 'カテゴリの理由: 当てはまる語が無いので「地域」');
+    check('category: 解析できなかった行には理由を出さない', items[4] && !items[4].querySelector('.task-reason') && !items[4].querySelector('.badge'));
 }
 
 // ------------------------------------------------------------
@@ -692,7 +726,7 @@ async function calendarFile() {
 }
 
 const scenarios = [
-    xssIsShownAsText, noticesStay, loadingState, errorResponses, tabsKeyboard,
+    xssIsShownAsText, categoryReason, noticesStay, loadingState, errorResponses, tabsKeyboard,
     updateNotice, firstInstallHasNoNotice, waitingWorkerShowsNotice,
     saveAndChangeStatus, staleAndImportErrors, copyLedger, notionCsv, lanesSetting, calendarFile
 ];

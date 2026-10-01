@@ -28,13 +28,9 @@
         unknown: '読めない',
         none: '期限なし'
     };
-    // カテゴリ（API の値）→ 印の色のクラス
-    const CATEGORY_CLASSES = {
-        '寺院関係': 'temple',
-        '青鳳会': 'seihoukai',
-        '詠道部': 'eidoubu',
-        '個人': 'personal'
-    };
+    // カテゴリの印の色は、API の category_color（1〜6）で選ぶ（B27）。
+    // カテゴリ名は設定（サーバーの CATEGORY_CONFIG_JSON など）で決めるので、画面には名前を書かない
+    const CATEGORY_COLOR_COUNT = 6;
     // 利用者に見せる文言（読み上げにも使う）
     const MESSAGES = {
         loading: '解析中…',
@@ -95,13 +91,24 @@
         });
     }
 
+    // 印の色のクラス（1〜6 以外は、色の無い 0）
+    function categoryClass(color) {
+        return Number.isInteger(color) && color >= 1 && color <= CATEGORY_COLOR_COUNT ? `badge-cat-${color}` : 'badge-cat-0';
+    }
+
+    // カテゴリの理由（当たった語）。当たった語が無ければ、決まりのカテゴリにしたと書く
+    function categoryReason(task) {
+        const hits = Array.isArray(task.category_hits) ? task.category_hits.filter(word => typeof word === 'string') : [];
+        if (hits.length) return `カテゴリの理由: ${hits.map(word => `「${word}」`).join('')}`;
+        return `カテゴリの理由: 当てはまる語が無いので「${task.category}」`;
+    }
+
     function buildTaskItem(task) {
         const item = create('li', 'task-item');
         const failed = task.ok === false;
         if (failed) item.classList.add('task-failed');
         else if (task.needs_review) item.classList.add('task-review');
 
-        const categoryClass = CATEGORY_CLASSES[task.category] || 'personal';
         const deadlineText = formatDeadline(task);
         const timeText = task.due_time ? ` ${task.due_time}` : '';
 
@@ -113,7 +120,7 @@
 
         if (!failed) {
             const meta = create('div', 'task-meta');
-            const badge = create('span', `badge badge-${categoryClass}`, task.category);
+            const badge = create('span', `badge ${categoryClass(task.category_color)}`, task.category);
             const deadline = create('span', 'deadline');
             deadline.append(icon('📅'), ` ${deadlineText}${timeText}`);
             meta.append(badge, deadline);
@@ -138,6 +145,9 @@
                 reading.textContent = `読み取り: 「${task.due_raw}」→ ${how}`;
                 item.appendChild(reading);
             }
+
+            // カテゴリをどの語で決めたか（B27）
+            if (task.category) item.appendChild(create('div', 'task-reason', categoryReason(task)));
         }
 
         const notes = failed ? [task.error || '解析できませんでした'] : (task.warnings || []);

@@ -289,10 +289,14 @@ textarea:focus {
     font-weight: 500;
 }
 
-.badge-temple { background: #e3f2fd; color: #1565c0; }
-.badge-seihoukai { background: #fff3e0; color: #a84300; }
-.badge-eidoubu { background: #f3e5f5; color: #7b1fa2; }
-.badge-personal { background: var(--success-bg); color: var(--success); }
+/* カテゴリの印の色（B27）。どのカテゴリに何番を使うかは設定（color: 1〜6）で決める。0 は番号が無いとき */
+.badge-cat-0 { background: var(--surface-sub); color: var(--text-sub); }
+.badge-cat-1 { background: #e3f2fd; color: #1565c0; }
+.badge-cat-2 { background: #fff3e0; color: #a84300; }
+.badge-cat-3 { background: #f3e5f5; color: #7b1fa2; }
+.badge-cat-4 { background: var(--success-bg); color: var(--success); }
+.badge-cat-5 { background: #e0f2f1; color: #00695c; }
+.badge-cat-6 { background: #efebe9; color: #5d4037; }
 
 .deadline {
     color: var(--text-muted);
@@ -317,6 +321,14 @@ textarea:focus {
 /* どの表現をどう読んだか・要確認の印（B26） */
 .task-reading {
     margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-reading);
+    overflow-wrap: anywhere;
+}
+
+/* カテゴリをどの語で決めたか（B27） */
+.task-reason {
+    margin-top: 4px;
     font-size: 13px;
     color: var(--text-reading);
     overflow-wrap: anywhere;

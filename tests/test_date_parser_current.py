@@ -1,7 +1,8 @@
-"""backend/date_parser.py（Web API が使う期限解析）の今の挙動を記録する。
+"""backend/date_parser.py（Web API が使う期限解析）の挙動を記録する。
 
 基準日は conftest の frozen_now（2026-10-01 木曜 10:00 JST）に固定している。
-期限解析の一本化（B26）で挙動を変えるときは、このテストも合わせて直す。
+B26 で解析の本体を backend/task_sync/date_rules.py に一本化した。
+仕様を変えた箇所は「B26 仕様変更」と書き、旧の値を残している。
 """
 from __future__ import annotations
 
@@ -24,7 +25,8 @@ def iso(text: str) -> str | None:
         ("資料作り (12/25まで)", "2026-12-25T00:00:00+09:00"),
         ("資料作り (3/15まで)", "2027-03-15T00:00:00+09:00"),
         ("資料作り (10/1まで)", "2026-10-01T00:00:00+09:00"),  # 当日は今年のまま
-        ("資料作り (9/30まで)", "2027-09-30T00:00:00+09:00"),  # 前日は翌年
+        # B26 仕様変更: 旧は「前日は翌年」で 2027-09-30。直近の過去日は今年のまま「期限切れ」
+        ("資料作り (9/30まで)", "2026-09-30T00:00:00+09:00"),
         # (M月中): その月の末日。過ぎていれば翌年
         ("資料作り (10月中)", "2026-10-31T00:00:00+09:00"),
         ("資料作り (12月中)", "2026-12-31T00:00:00+09:00"),
@@ -47,25 +49,36 @@ def test_parse_date_current_behavior(frozen_now, text, expected):
     assert iso(text) == expected
 
 
-def test_slash_date_has_priority_over_other_patterns(frozen_now):
-    # 1行に複数あるときは (M/Dまで) が優先される
-    assert iso("資料作り (至急)(3/15まで)") == "2027-03-15T00:00:00+09:00"
+def test_two_due_parts_pick_the_earliest_and_need_review(frozen_now):
+    # B26 仕様変更: 旧は (M/Dまで) を優先して 2027-03-15。
+    # 期限が2つ以上なら、見落とさないよう「いちばん早い日」を採り、要確認にする
+    from backend.date_parser import parse_deadline
+
+    result = parse_deadline("資料作り (至急)(3/15まで)")
+    assert result.deadline.isoformat() == "2026-10-02T00:00:00+09:00"
+    assert result.title == "資料作り"
+    assert result.needs_review is True
+    assert any("2つ以上" in warning for warning in result.warnings)
 
 
 @pytest.mark.parametrize(
-    ("today", "expected"),
+    ("today", "expected", "needs_review"),
     [
-        (datetime(2026, 10, 3, 9, 0), "2026-10-11"),  # 土曜 → 8日後の日曜
-        (datetime(2026, 10, 4, 9, 0), "2026-10-18"),  # 日曜 → 14日後の日曜
-        (datetime(2026, 10, 5, 9, 0), "2026-10-18"),  # 月曜 → 13日後の日曜
+        (datetime(2026, 10, 3, 9, 0), "2026-10-11", False),  # 土曜 → 8日後の日曜
+        # B26 仕様変更: 旧は 2026-10-18（日曜に入力すると2週間後）。週は月曜始まりなので、
+        # 日曜の「来週」は翌日の月曜からの週 → 7日後の日曜。日曜始まりの人と食い違うので要確認
+        (datetime(2026, 10, 4, 9, 0), "2026-10-11", True),
+        (datetime(2026, 10, 5, 9, 0), "2026-10-18", False),  # 月曜 → 13日後の日曜
     ],
 )
-def test_next_week_is_sunday_after_this_week(freeze_jst, today, expected):
-    # 今の実装は「今週の日曜の、さらに7日後」。日曜に入力すると2週間後になる（B26 で見直す候補）
+def test_next_week_is_sunday_of_next_monday_start_week(freeze_jst, today, expected, needs_review):
+    from backend.date_parser import parse_deadline
+
     freeze_jst(today)
-    result = parse_date("資料作り (来週まで)")
-    assert result.date().isoformat() == expected
-    assert result.weekday() == 6
+    result = parse_deadline("資料作り (来週まで)")
+    assert result.deadline.date().isoformat() == expected
+    assert result.deadline.weekday() == 6
+    assert result.needs_review is needs_review
 
 
 def test_result_is_midnight_jst(frozen_now):
@@ -74,17 +87,32 @@ def test_result_is_midnight_jst(frozen_now):
     assert result.utcoffset().total_seconds() == 9 * 3600
 
 
-def test_two_parsers_disagree_on_recent_past_dates(frozen_now):
-    """Web API 用と task_sync 用で、少し前の日付の年の決め方が違う（B26 で一本化する）。"""
+def test_two_parsers_now_agree_on_recent_past_dates(frozen_now):
+    """B26 仕様変更: 旧は Web が 2027-09-01（過ぎていれば翌年）、task_sync が 2026-09-01 で食い違った。
+    一本化して、どちらも「今年のまま・期限切れ・要確認」になる。"""
+    from backend.date_parser import parse_deadline
     from backend.task_sync.date_rules import parse_due_expression
 
-    web = parse_date("資料作り (9/1まで)")
+    web = parse_deadline("資料作り (9/1まで)")
     cli = parse_due_expression("9/1まで", today=frozen_now.date())
-    assert web.date().isoformat() == "2027-09-01"  # 過ぎていれば翌年
-    assert cli.due_date.isoformat() == "2026-09-01"  # 約2か月前までは今年のまま
+    assert web.deadline.date().isoformat() == "2026-09-01"
+    assert cli.due_date.isoformat() == "2026-09-01"
+    assert web.overdue is cli.overdue is True
+    assert web.needs_review is cli.needs_review is True
 
 
-def test_month_end_rollover_into_leap_year_keeps_28th(freeze_jst):
-    # 今の実装は「今年の月末 + 1年」なので、翌年がうるう年でも 2/28 になる（B26 で見直す候補）
+def test_month_end_rollover_into_leap_year_uses_29th(freeze_jst):
+    # B26 仕様変更: 旧は「今年の月末 + 1年」で、翌年がうるう年でも 2028-02-28 だった。
+    # 翌年に繰り越すときは、その年の月末で数える
+    freeze_jst(datetime(2027, 6, 1, 9, 0))
+    assert parse_date("資料作り (2月中)").date().isoformat() == "2028-02-29"
+
+
+def test_month_end_just_passed_is_overdue_this_year(freeze_jst):
+    # B26 仕様変更: 旧（基準日 2027-03-01）は 2028-02-28。直近の過去なので今年のまま期限切れ
+    from backend.date_parser import parse_deadline
+
     freeze_jst(datetime(2027, 3, 1, 9, 0))
-    assert parse_date("資料作り (2月中)").date().isoformat() == "2028-02-28"
+    result = parse_deadline("資料作り (2月中)")
+    assert result.deadline.date().isoformat() == "2027-02-28"
+    assert result.overdue is True

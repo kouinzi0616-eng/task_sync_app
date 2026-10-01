@@ -53,11 +53,21 @@ def test_feb_29_in_leap_year_is_valid():
     assert result.warnings == ()
 
 
-def test_feb_29_after_it_passed_in_leap_year_warns_instead_of_crashing():
-    # 2028-02-29 は過ぎているので翌年にしたいが、2029-02-29 は存在しない
+def test_feb_29_just_passed_in_leap_year_is_overdue_this_year():
+    # B26 仕様変更: 旧は「過ぎていれば翌年」→ 2029-02-29 が無いので期限なし＋警告だった。
+    # 直近（猶予 62日の内）の過去日は今年のまま「期限切れ」にする
     result = parse_deadline("資料 (2/29まで)", now=datetime(2028, 3, 5, tzinfo=JST))
+    assert result.deadline.isoformat() == "2028-02-29T00:00:00+09:00"
+    assert result.overdue is True
+    assert result.needs_review is True
+
+
+def test_feb_29_long_passed_in_leap_year_warns_instead_of_crashing():
+    # 猶予を過ぎたので翌年にしたいが、2029-02-29 は存在しない → 例外にせず期限なし＋警告
+    result = parse_deadline("資料 (2/29まで)", now=datetime(2028, 6, 1, tzinfo=JST))
     assert result.deadline is None
-    assert result.warnings
+    assert len(result.warnings) == 1
+    assert "存在しない日付" in result.warnings[0]
 
 
 # ------------------------------------------------------------

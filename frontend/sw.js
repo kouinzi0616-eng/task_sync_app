@@ -12,6 +12,7 @@
 // - API（/api/）はキャッシュしない。電波が無いときは { offline: true } の 503 を返す。
 // - 画面を開こうとして、電波も控えも無いときは offline.html（オフライン画面）を返す。
 // - 新しい版を入れても勝手には切り替えない。画面の「更新する」（SKIP_WAITING）で切り替える。
+//   ただし、案内を出せない古い版（v3 まで）からは、待たずに切り替える（次に開いたときに新しい画面になる）。
 // ============================================================
 
 // PRECACHE_URLS のファイルを変えたら、この番号を 1 つ上げる。
@@ -44,12 +45,26 @@ const OFFLINE_FALLBACK_HTML =
   '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><title>オフライン - Task Sync</title></head>' +
   '<body><p>オフラインです。電波のよい所で、もう一度開いてください。</p></body></html>';
 
+// 「新しい版があります」を出せる最初の版。これより古い版（キャッシュ優先だった v3 まで）の画面は
+// 案内を出せず、新しい版がいつまでも待ったままになるので、その版からは待たずに切り替える
+const FIRST_VERSION_WITH_UPDATE_NOTICE = 4;
+
+function isLegacyCache(name) {
+  const match = /^task-sync-v(\d+)$/.exec(name);
+  return Boolean(match) && Number(match[1]) < FIRST_VERSION_WITH_UPDATE_NOTICE;
+}
+
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache =>
-      // ブラウザの HTTP キャッシュを通さず、サーバーから取り直す
-      cache.addAll(PRECACHE_URLS.map(url => new Request(url, { cache: 'reload' })))
-    )
+    caches.open(CACHE_NAME)
+      .then(cache =>
+        // ブラウザの HTTP キャッシュを通さず、サーバーから取り直す
+        cache.addAll(PRECACHE_URLS.map(url => new Request(url, { cache: 'reload' })))
+      )
+      .then(() => caches.keys())
+      .then(names => {
+        if (names.some(isLegacyCache)) return self.skipWaiting();
+      })
   );
 });
 

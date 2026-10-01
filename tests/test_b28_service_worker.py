@@ -143,8 +143,11 @@ def test_unused_push_handlers_are_removed():
 
 
 def test_new_version_waits_for_the_user():
-    # 入れてすぐには切り替えない。画面の「更新する」（SKIP_WAITING）で切り替える
-    assert SW.count("skipWaiting()") == 1
+    # 入れてすぐには切り替えない。画面の「更新する」（SKIP_WAITING）で切り替える。
+    # 例外は、案内を出せない古い版（v3 まで）からの移行だけ（動きは sw_checks.mjs で確かめる）
+    assert SW.count("skipWaiting()") == 2
+    assert "if (names.some(isLegacyCache)) return self.skipWaiting();" in SW
+    assert "const FIRST_VERSION_WITH_UPDATE_NOTICE = 4;" in SW
     assert "event.data.type === 'SKIP_WAITING'" in SW
     assert "新しい版があります" in APP_JS
     assert "postMessage({ type: 'SKIP_WAITING' })" in APP_JS

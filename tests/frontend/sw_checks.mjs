@@ -166,6 +166,17 @@ async function run() {
     check('handlers: push の処理が無い', !('push' in env.handlers) && !('notificationclick' in env.handlers),
         Object.keys(env.handlers).join(','));
 
+    // 案内を出せない古い版（v3 まで・キャッシュ優先）を使っていた人は、待たずに切り替える
+    const legacy = setup();
+    await legacy.caches.open('task-sync-v3');
+    await lifecycle(legacy, 'install');
+    check('install: 古い版（v3）からは待たずに切り替える', legacy.counters.skipWaiting === 1, legacy.counters.skipWaiting);
+    const later = setup();
+    await later.caches.open('task-sync-v4');
+    await later.caches.open('task-sync-v30');
+    await lifecycle(later, 'install');
+    check('install: 案内を出せる版（v4 以降）からは待つ', later.counters.skipWaiting === 0, later.counters.skipWaiting);
+
     // 「更新する」→ SKIP_WAITING
     await lifecycle(env, 'message', { type: 'OTHER' });
     check('message: ほかの知らせでは切り替えない', env.counters.skipWaiting === 0);

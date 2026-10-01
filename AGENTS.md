@@ -12,7 +12,7 @@ AI エージェント（Claude Code・Codex など）と人が最初に読む短
 | `backend/api.py` | FastAPI 本体。画面（frontend/）も配信する。Render は `uvicorn backend.api:app` で起動 |
 | `backend/date_parser.py` | 期限解析の薄い互換層（JST の今日を基準日にし、期限を JST 0:00 にする）。読み方の正本は `backend/task_sync/date_rules.py` |
 | `backend/category_classifier.py`・`backend/models.py` | カテゴリ分類とデータの形 |
-| `backend/task_sync/` | 期限解析の正本（`date_rules.py`）と、カレンダー同期用の解析・同期の部品（Google の依存は `requirements-calendar.txt`） |
+| `backend/task_sync/` | 期限解析の正本（`date_rules.py`）、急ぎの規則ベース検出（`urgency.py`。画面・API にはまだつないでいない）、カレンダー同期用の解析・同期の部品（Google の依存は `requirements-calendar.txt`） |
 | `backend/database.py` | 履歴保存（今は API から使っていない） |
 | `frontend/` | PWA（index.html・sw.js・manifest.json・アイコン） |
 | `tests/` | pytest。`labs/` ができたら、そこのテストも一緒に回る |

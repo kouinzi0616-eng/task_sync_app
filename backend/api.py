@@ -86,8 +86,10 @@ SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",  # 宣言した種類以外として読ませない
     "Referrer-Policy": "no-referrer",  # 他のサイトへ URL を渡さない
     "X-Frame-Options": "DENY",  # frame-ancestors を知らない古いブラウザ向け
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
-    "Cross-Origin-Opener-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",  # 使わない機能を止める
+    # ほかのサイトから開かれても window.opener で触らせない。
+    # 自分で開くポップアップ（将来の Google のログインなど）は使えるよう allow-popups にする
+    "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
 }
 
 # API の説明ページ（ENABLE_API_DOCS=1 のときだけ出る）は外部の JS とインラインの script を使うので、

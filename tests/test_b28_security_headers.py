@@ -35,6 +35,8 @@ def _assert_security_headers(response, *, with_csp: bool = True):
     assert headers["x-content-type-options"] == "nosniff"
     assert headers["referrer-policy"] == "no-referrer"
     assert headers["x-frame-options"] == "DENY"
+    assert headers["cross-origin-opener-policy"] == "same-origin-allow-popups"
+    assert "camera=()" in headers["permissions-policy"]
     if not with_csp:
         assert "content-security-policy" not in headers
         return

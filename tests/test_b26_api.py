@@ -111,13 +111,14 @@ def test_sync_request_still_accepts_old_shape(client):
 
 
 def test_frontend_shows_reading_and_review_marks_with_text_content(client):
-    html = client.get("/").text
-    assert "task.needs_review" in html
-    assert "task.overdue" in html
-    assert "reading.textContent = `読み取り: 「${task.due_raw}」→ ${how}`" in html
-    assert "review.textContent = '要確認'" in html
+    # 画面の動きは B28 で /app.js に分けた（innerHTML を使わないことは test_b28_frontend_static.py で確かめる）
+    js = client.get("/app.js").text
+    assert "task.needs_review" in js
+    assert "task.overdue" in js
+    assert "reading.textContent = `読み取り: 「${task.due_raw}」→ ${how}`" in js
+    assert "review.textContent = '要確認'" in js
     # 入力に由来する文字（due_raw・title）を innerHTML に入れない
-    for line in html.splitlines():
+    for line in js.splitlines():
         if "innerHTML" in line:
             assert "task." not in line, line
 

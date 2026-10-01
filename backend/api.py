@@ -274,33 +274,50 @@ async def sync_to_calendar(sync_request: SyncRequest):
 # 起動したフォルダに関係なく見つかるよう、このファイルの位置を基準にする
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 
+# 画面の本体は毎回サーバーに確かめさせる（変わっていなければ 304 で軽く済む）。
+# 古い画面がブラウザの HTTP キャッシュに残り続けないようにするため。
+NO_CACHE_HEADERS = {"Cache-Control": "no-cache"}
+
+
+def _frontend_file(name: str, media_type: str) -> FileResponse:
+    """frontend/ の決まったファイルを返す（名前はコードに書いたものだけ）"""
+    path = frontend_dir / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"{name} not found")
+    return FileResponse(path, media_type=media_type, headers=NO_CACHE_HEADERS)
+
+
 if frontend_dir.exists() and frontend_dir.is_dir():
     # 静的ファイルを /static にマウント（CSS, JS, 画像など）
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
     
     # ルートパスでindex.htmlを返す
     @app.get("/", response_class=HTMLResponse)
+    @app.get("/index.html", response_class=HTMLResponse)
     async def serve_root():
         index_path = frontend_dir / "index.html"
         if index_path.exists():
-            return FileResponse(index_path)
+            return FileResponse(index_path, headers=NO_CACHE_HEADERS)
         return HTMLResponse("<h1>Frontend not found</h1>", status_code=404)
-    
+
+    # 画面の動きと見た目（index.html から分けたファイル）
+    @app.get("/app.js")
+    async def serve_app_js():
+        return _frontend_file("app.js", "application/javascript")
+
+    @app.get("/app.css")
+    async def serve_app_css():
+        return _frontend_file("app.css", "text/css")
+
     # manifest.json
     @app.get("/manifest.json")
     async def serve_manifest():
-        manifest_path = frontend_dir / "manifest.json"
-        if manifest_path.exists():
-            return FileResponse(manifest_path, media_type="application/json")
-        raise HTTPException(status_code=404, detail="manifest.json not found")
+        return _frontend_file("manifest.json", "application/json")
     
     # Service Worker
     @app.get("/sw.js")
     async def serve_sw():
-        sw_path = frontend_dir / "sw.js"
-        if sw_path.exists():
-            return FileResponse(sw_path, media_type="application/javascript")
-        raise HTTPException(status_code=404, detail="sw.js not found")
+        return _frontend_file("sw.js", "application/javascript")
     
     # アイコン（複数サイズ対応）
     @app.get("/icon-{size}.png")

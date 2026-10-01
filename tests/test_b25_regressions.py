@@ -328,8 +328,9 @@ def test_api_docs_can_be_enabled_by_env():
 # ------------------------------------------------------------
 
 def test_frontend_handles_per_row_results(client):
-    html = client.get("/").text
-    assert "task.ok === false" in html
-    assert "task.warnings" in html
-    assert "title.textContent = task.title" in html
-    assert "${task.title}" not in html
+    # 画面の動きは B28 で /app.js に分けた
+    js = client.get("/app.js").text
+    assert "task.ok === false" in js
+    assert "task.warnings" in js
+    assert "title.textContent = task.title" in js
+    assert "${task.title}" not in js

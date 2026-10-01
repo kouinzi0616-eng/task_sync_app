@@ -258,7 +258,7 @@ _YEAR_WORD_RE = re.compile(
 _URGENT_RE = re.compile(r"(?P<very>大至急)|至急|しきゅう|大急ぎ|急ぎ|いそぎ|早急|緊急")
 _REL_DAY_RE = re.compile(
     r"(?P<d3>明々後日|明明後日|しあさって)|(?P<d2>明後日|あさって)"
-    r"|(?P<d1>明日|あした|明朝|明晩)|(?P<d0>今日|本日|きょう|今夜|今晩)"
+    r"|(?P<d1>明日(?!葉)|あした|明朝|明晩)|(?P<d0>今日|本日|きょう|今夜|今晩)"
 )
 _SOON_RE = re.compile(
     r"なるはや|(?:なるべく|できるだけ|できる限り|一日も|一刻も)?(?:早|はや)[くめ]|ASAP",
@@ -740,6 +740,44 @@ def parse_due_in_line(line: str, today: Optional[date] = None) -> LineDueResult:
         overdue=chosen.overdue,
         warnings=tuple(warnings),
     )
+
+
+@dataclass(frozen=True)
+class DueMention:
+    """文の中で見つかった日付の書き方1つ（find_due_mentions の結果）"""
+    text: str  # 当たった文字（NFKC で半角にそろえた後）
+    start: int  # NFKC 後の文字列での位置
+    end: int
+    due_date: Optional[date]  # 存在しない日付なら None
+    due_type: DueType
+
+
+def find_due_mentions(text: str, today: Optional[date] = None) -> list[DueMention]:
+    """
+    括弧の外も含めて、文の中の日付の書き方を全部さがす（急ぎの検出 urgency.py 用）。
+
+    読み方は parse_due_expression と同じ規則（_ATOM_RULES）。位置は
+    unicodedata.normalize("NFKC", text) の文字列での位置。前から順に並べて返す。
+    """
+    if today is None:
+        today = date.today()
+    normalized = unicodedata.normalize("NFKC", text)
+    work = normalized
+    mentions: list[DueMention] = []
+    for pattern, reader in _ATOM_RULES:
+        for match in pattern.finditer(work):
+            atom = reader(match, today)
+            mentions.append(DueMention(
+                text=normalized[match.start():match.end()],
+                start=match.start(),
+                end=match.end(),
+                due_date=atom.due,
+                due_type=atom.due_type,
+            ))
+        # 同じ長さの埋め草で消す（位置をずらさない・同じ文字を2回読まない）
+        work = pattern.sub(lambda match: "\x00" * len(match.group(0)), work)
+    mentions.sort(key=lambda mention: mention.start)
+    return mentions
 
 
 def extract_due_part(line: str) -> tuple[str, str]:

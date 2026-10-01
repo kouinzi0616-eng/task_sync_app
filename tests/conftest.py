@@ -3,6 +3,8 @@
 - client: 本物の FastAPI アプリに対する TestClient（外部には送信しない）
 - freeze_jst: backend.date_parser の「今」を日本時間の任意の時刻に固定する
 - frozen_now: 基準日を 2026-10-01（木）10:00 JST に固定する
+- カテゴリの設定: どのテストも、公開している見本（categories.sample.json）で始める（自動）
+- reallike_categories: 実物に似せた架空の設定（tests/fixtures/categories_reallike.json）に切り替える
 
 テストで使う文字列はすべて架空のもの。
 """
@@ -17,13 +19,37 @@ from zoneinfo import ZoneInfo
 import pytest
 
 # 手元の環境変数で結果が変わらないよう、アプリが読む変数を消してから backend.api を読む
-os.environ.pop("ENABLE_API_DOCS", None)
+for _name in ("ENABLE_API_DOCS", "CATEGORY_CONFIG_JSON", "CATEGORY_CONFIG_FILE"):
+    os.environ.pop(_name, None)
 
 ROOT = Path(__file__).resolve().parent.parent
 JST = ZoneInfo("Asia/Tokyo")
 
 # 期限計算の基準にする固定の「今」（木曜日）
 FIXED_NOW = datetime(2026, 10, 1, 10, 0, tzinfo=JST)
+
+# 実物に似せた架空のカテゴリの設定（名前・語はすべて架空。形は実物と同じ）
+REALLIKE_CATEGORIES = ROOT / "tests" / "fixtures" / "categories_reallike.json"
+
+
+@pytest.fixture(autouse=True)
+def _sample_categories():
+    """どのテストも見本の設定で始める（手元の private/categories.json や環境変数を読まない）"""
+    from backend.task_sync import categories
+
+    categories.reload_config(environ={}, local_path=None)
+    yield
+    categories.reload_config(environ={}, local_path=None)
+
+
+@pytest.fixture
+def reallike_categories():
+    """実物に似せた架空の設定に切り替え、その設定を返す"""
+    from backend.task_sync import categories
+
+    config = categories.load_config_file(REALLIKE_CATEGORIES)
+    categories.set_active_config(config)
+    return config
 
 
 @pytest.fixture

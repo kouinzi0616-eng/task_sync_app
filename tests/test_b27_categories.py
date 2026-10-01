@@ -18,6 +18,8 @@ import importlib.util
 import itertools
 import json
 import logging
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -412,3 +414,55 @@ def test_reload_and_set_active(reallike):
     assert categories.config_status().source == categories.SOURCE_FILE
     categories.reload_config(environ={}, local_path=None)
     assert categories.active_config().source == categories.SOURCE_SAMPLE
+
+
+# ------------------------------------------------------------
+# scripts/category_config.py（手元で確かめる・試す・1行にする）
+# ------------------------------------------------------------
+
+def _run_tool(*args: str, env_extra: dict | None = None):
+    env = {k: v for k, v in os.environ.items() if k not in (categories.ENV_JSON, categories.ENV_FILE)}
+    env.update(env_extra or {})
+    return subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "category_config.py"), *args],
+        cwd=ROOT, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60,
+    )
+
+
+def test_tool_check_prints_counts_only():
+    result = _run_tool("check", str(REALLIKE_PATH))
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith("使えます: カテゴリ 4 個")
+    assert all(name not in result.stdout for name in ORDER)
+
+
+def test_tool_try_shows_category_and_reason():
+    result = _run_tool("try", str(REALLIKE_PATH), "会議の議事録", "見本会の会議")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        f"会議の議事録 → {PERSONAL}（色 4・理由: 当てはまる語なし（決まりのカテゴリ））",
+        f"見本会の会議 → {GROUP1}（色 2・理由: 見本会・会議）",
+    ]
+
+
+def test_tool_env_makes_one_line_that_reads_back_the_same(reallike):
+    result = _run_tool("env", str(REALLIKE_PATH))
+    assert result.returncode == 0, result.stderr
+    line = result.stdout.strip()
+    assert "\n" not in line
+    config, status = categories.load_config({categories.ENV_JSON: line}, local_path=None)
+    assert status.error is None
+    assert config.categories == reallike.categories and config.exclude == reallike.exclude
+
+
+def test_tool_rejects_broken_file(tmp_path):
+    broken = tmp_path / "broken.json"
+    broken.write_text('{"default": "架空", ', encoding="utf-8")
+    result = _run_tool("check", str(broken))
+    assert result.returncode == 1
+    assert "JSON として読めません" in result.stderr
+
+
+def test_tool_without_file_uses_the_app_order(tmp_path):
+    result = _run_tool("check", env_extra={categories.ENV_FILE: str(REALLIKE_PATH)})
+    assert result.returncode == 0 and "読み先: file" in result.stdout

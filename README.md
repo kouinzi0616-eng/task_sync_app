@@ -76,6 +76,27 @@
 `due_type`（上の表の種類）・`due_raw`（読み取った括弧の中身）・`due_time`・`needs_review`・`overdue` を返します。
 画面は「読み取り: 「3/15まで」→ 2027年3月15日（日付）」のように、どの表現をどう読んだかと、要確認・期限切れの印を出します。
 
+## 画面の安全と見やすさ
+- 画面の JS と CSS は `frontend/app.js`・`frontend/app.css` に分けています。HTML の中に script や style は書きません。
+- 入力や API の応答の文字は `textContent` で表示します。`innerHTML` などで HTML として入れることはしません。
+- すべての応答に、次のヘッダを付けます（`backend/api.py` の `SECURITY_HEADERS`）。
+  - `Content-Security-Policy`: 自分のサーバーの JS・CSS だけを動かします（`script-src 'self'`）。ほかのサイトの枠（iframe）には入れさせません（`frame-ancestors 'none'`）。
+  - `X-Content-Type-Options: nosniff`（宣言した種類以外として読ませない）・`Referrer-Policy: no-referrer`（ほかのサイトへ URL を渡さない）など。
+  - `ENABLE_API_DOCS=1` のときの `/docs`・`/redoc` だけは CSP を付けません（外部の JS を使うため）。
+
+### オフラインと新しい版（Service Worker）
+- 画面（`/`・`index.html`・`app.js`・`app.css`）は**ネット優先**です。つながらないときだけ、最後に取れた版（キャッシュ）を使います。
+- 開けるものが何も無いときは、オフライン画面（`offline.html`）を出します。解析は電波のあるときだけできます。
+- 新しい版が届くと、画面の上に「新しい版があります」と出ます。「更新する」を押すと切り替わります。
+- **画面のファイルを変えたら**、`frontend/sw.js` の `CACHE_VERSION` を1つ上げて、`python scripts/sw_version.py --update` を実行します。
+  上げ忘れはテスト（`tests/test_b28_service_worker.py`）で失敗になります。
+
+### 見やすさ（アクセシビリティ）
+- タブは矢印キー（← →）・Home・End で移れます。
+- 「解析中…」・結果・エラーの知らせは、読み上げソフトに伝わる領域（aria-live）に出します。自動では消しません。
+- 文字色と背景の対比は、すべて 4.5:1 以上です。色を変えたら `python scripts/contrast.py` で表を出して確かめます（テストでも確かめます）。
+- ホーム画面のアイコンは、用途 any（そのまま）と maskable（丸などに切り抜かれる用）を分けています。maskable 用は `python scripts/make_maskable_icons.py` で作り直せます。
+
 ## 起動のしかた（手元）
 Python 3.12 を想定しています（3.11 と 3.13 でもテストしています）。
 
@@ -96,6 +117,8 @@ API の説明ページ（`/docs`）は既定では出しません。手元で見
 pip install -r requirements.txt -r requirements-dev.txt
 bash scripts/check.sh           # 構文確認 → ruff → pytest を1本で回す
 ```
+
+画面の動きの試験（`tests/test_b28_frontend_js.py`）は node（18 以上）で `app.js`・`sw.js` を偽の DOM の上で動かします。node が無ければ飛ばします。
 
 Windows（PowerShell）で bash が無いときは、同じことを次の1行で行います（venv を有効にしてから）。
 `python -m compileall -q backend tests main_api.py; if ($?) { python -m ruff check . }; if ($?) { python -m pytest -q }`

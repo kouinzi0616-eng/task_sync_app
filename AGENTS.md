@@ -14,9 +14,10 @@ AI エージェント（Claude Code・Codex など）と人が最初に読む短
 | `backend/category_classifier.py`・`backend/models.py` | カテゴリ分類とデータの形 |
 | `backend/task_sync/` | 期限解析の正本（`date_rules.py`）、急ぎの規則ベース検出（`urgency.py`。画面・API にはまだつないでいない）、カレンダー同期用の解析・同期の部品（Google の依存は `requirements-calendar.txt`） |
 | `backend/database.py` | 履歴保存（今は API から使っていない） |
-| `frontend/` | PWA（index.html・sw.js・manifest.json・アイコン） |
-| `tests/` | pytest。`labs/` ができたら、そこのテストも一緒に回る |
+| `frontend/` | PWA（index.html・app.js・app.css・offline.html・sw.js・manifest.json・アイコン）。CSP があるので HTML にインラインの script・style は書かない |
+| `tests/` | pytest。`labs/` ができたら、そこのテストも一緒に回る。`tests/frontend/` は node で app.js・sw.js を動かす偽 DOM（node が無ければ飛ばす） |
 | `scripts/check.sh` | 検証コマンド（構文確認 → ruff → pytest） |
+| `scripts/sw_version.py`・`contrast.py`・`make_maskable_icons.py` | Service Worker の版の記録・文字色の対比の表・maskable アイコンの作成（標準ライブラリだけ） |
 | `requirements*.in` / `requirements*.txt` | 直接の依存（.in）と、版を固定したロック（.txt） |
 
 ## 検証（変更したら必ず回す）
@@ -26,6 +27,8 @@ bash scripts/check.sh
 ```
 - CI（`.github/workflows/ci.yml`）も同じ `scripts/check.sh` を Python 3.11 / 3.12 / 3.13 で回す。
 - 期限解析を変えたら、`tests/test_api_parse_current.py` の正常系の出力が変わらないことと、共通検算表 `tests/fixtures/due_cases.json` の全件一致（`tests/test_due_cases.py`）を確かめる。仕様を変えるときは、表の期待値と備考（【旧と違う】と理由）と README の表を一緒に直す。
+- 画面（`frontend/` の index.html・app.js・app.css・offline.html・manifest.json・アイコン）を変えたら、`frontend/sw.js` の `CACHE_VERSION` を1つ上げて `python scripts/sw_version.py --update` を回す（上げ忘れは `tests/test_b28_service_worker.py` が落とす）。
+- 画面の色を変えたら `python scripts/contrast.py` で対比の表を見る（文字 4.5・枠 3.0 未満はテストが落とす）。文字は `textContent` で入れ、`innerHTML` などは使わない。
 - Claude Code on the web では、SessionStart フック（`.claude/hooks/session-start.sh`）が `.venv` に依存を入れる。
 
 ## 依存と版

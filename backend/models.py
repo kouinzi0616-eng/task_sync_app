@@ -13,11 +13,10 @@
 """
 from __future__ import annotations
 
-from datetime import datetime
 from enum import Enum
-from typing import Optional
 
-from pydantic import BaseModel, Field
+# 履歴保存（backend/database.py）だけが使っていた Task モデルは、B29 で database.py と一緒に削除した。
+# タスクは画面（frontend/）が端末の中（IndexedDB）に保存する。方針は docs/storage.md。
 
 
 class Category(str, Enum):
@@ -26,18 +25,3 @@ class Category(str, Enum):
     SEIHOUKAI = "青鳳会"
     EIDOUBU = "詠道部"
     PERSONAL = "個人"
-
-
-class Task(BaseModel):
-    """タスクモデル"""
-    title: str = Field(..., description="タスクのタイトル")
-    deadline: Optional[datetime] = Field(None, description="期限（終日イベント想定）")
-    category: Category = Field(..., description="カテゴリ")
-    raw_text: str = Field(..., description="元のテキスト（ログ用）")
-    
-    class Config:
-        """Pydantic設定"""
-        use_enum_values = True  # EnumをJSON化する際に値を使用
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }

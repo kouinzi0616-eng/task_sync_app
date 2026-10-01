@@ -455,6 +455,21 @@ _ATOM_RULES: tuple[tuple[re.Pattern[str], Callable[[re.Match[str], date], _Atom]
 )
 
 
+def _start_of(due: date, due_type: DueType) -> date:
+    """期間の終わりの日から、始まりの日を求める（「以降・から」用）"""
+    if due_type is DueType.WEEK:
+        return _monday(due)
+    if due_type is DueType.MONTH_END:
+        return due.replace(day=1)
+    if due_type is DueType.PERIOD:
+        if due.day == EARLY_PART_DAY:
+            return due.replace(day=1)
+        if due.day == MIDDLE_PART_DAY:
+            return due.replace(day=EARLY_PART_DAY + 1)
+        return due.replace(day=MIDDLE_PART_DAY + 1)
+    return due
+
+
 def _read_time(match: re.Match[str]) -> tuple[Optional[time], Optional[str]]:
     """時刻を読む。(時刻, 要確認の理由) を返す。読めなければ時刻は None"""
     hour = int(match["h"])
@@ -586,12 +601,17 @@ def parse_due_expression(
     else:
         chosen = next(atom for atom in valid if atom.due == dates[0])
         notes.append(f"日付が2つ以上あります（いちばん早い{_md(dates[0])}にしました）")
-    notes.extend(chosen.notes)
 
     due = chosen.due
     assert due is not None
     due_type = chosen.due_type
-    if len(dates) == 1 and _AFTER_RE.search(text):
+    is_after = len(dates) == 1 and bool(_AFTER_RE.search(text))
+    if not (is_after and due_type is DueType.MONTH_END):
+        # 「11月から」は 11/1 からと決まるので、「月だけなので月末」の注意は要らない
+        notes.extend(chosen.notes)
+    if is_after:
+        # 「以降・から」は、その期間の始まりの日（来週から → 来週の月曜、11月から → 11/1）
+        due = _start_of(due, due_type)
         due_type = DueType.AFTER
 
     # (5) 要確認の理由を集める

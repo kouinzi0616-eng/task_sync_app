@@ -108,3 +108,20 @@ def test_sync_request_still_accepts_old_shape(client):
     response = client.post("/api/sync-calendar", json={"tasks": [old_shape]})
     assert response.status_code == 200
     assert response.json()["tasks_count"] == 1
+
+
+def test_frontend_shows_reading_and_review_marks_with_text_content(client):
+    html = client.get("/").text
+    assert "task.needs_review" in html
+    assert "task.overdue" in html
+    assert "reading.textContent = `読み取り: 「${task.due_raw}」→ ${how}`" in html
+    assert "review.textContent = '要確認'" in html
+    # 入力に由来する文字（due_raw・title）を innerHTML に入れない
+    for line in html.splitlines():
+        if "innerHTML" in line:
+            assert "task." not in line, line
+
+
+def test_service_worker_cache_name_was_bumped_for_new_screen(client):
+    # 画面を変えたらキャッシュ名の番号を上げる（古い画面が残らないように）
+    assert "task-sync-v3" in client.get("/sw.js").text

@@ -23,6 +23,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
+from starlette.datastructures import MutableHeaders
 
 # 絶対インポート（プロジェクトルートから実行する場合）
 from backend.models import Category
@@ -58,6 +59,72 @@ app = FastAPI(
 
 # CORS は設定しない。画面（frontend/）と API は同じオリジンから配信しているので不要で、
 # 他のサイトから資格情報つきで呼べる状態を作らないため。
+
+
+# ============================================================
+# 応答ヘッダ（画面の安全: B28）
+# ============================================================
+
+# 画面の JS・CSS は自分のサーバーのファイルだけを使う（インラインの script・style は動かさない）。
+# 万一、入力が HTML として差し込まれても、スクリプトは実行されない。
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "img-src 'self'",
+    "connect-src 'self'",
+    "manifest-src 'self'",
+    "worker-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",  # 他のサイトの枠（iframe）に入れさせない
+])
+
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    "X-Content-Type-Options": "nosniff",  # 宣言した種類以外として読ませない
+    "Referrer-Policy": "no-referrer",  # 他のサイトへ URL を渡さない
+    "X-Frame-Options": "DENY",  # frame-ancestors を知らない古いブラウザ向け
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+}
+
+# API の説明ページ（ENABLE_API_DOCS=1 のときだけ出る）は外部の JS とインラインの script を使うので、
+# そのページにだけ CSP を付けない（ほかのヘッダは付ける）。
+API_DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc"})
+
+
+class SecurityHeadersMiddleware:
+    """すべての HTTP 応答に SECURITY_HEADERS を足す（ASGI のミドルウェア）"""
+
+    def __init__(self, app, csp_exempt_paths: frozenset[str] = frozenset()):
+        self.app = app
+        self.csp_exempt_paths = csp_exempt_paths
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        skip_csp = scope.get("path") in self.csp_exempt_paths
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                for name, value in SECURITY_HEADERS.items():
+                    if skip_csp and name == "Content-Security-Policy":
+                        continue
+                    headers.setdefault(name, value)
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    csp_exempt_paths=API_DOCS_PATHS if API_DOCS_ENABLED else frozenset(),
+)
 
 
 # ============================================================

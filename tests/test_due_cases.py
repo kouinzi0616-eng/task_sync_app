@@ -153,3 +153,24 @@ def test_fixture_covers_the_required_situations():
     assert has(lambda c: "2/29" in c["input"])
     for word in ("上旬", "中旬", "下旬", "今週中", "年度末", "日まで"):
         assert has(lambda c, word=word: word in c["input"]), word
+
+
+def test_parse_text_keeps_every_line_of_the_table():
+    """合格条件: parse_text の入力の行数と出力の行数が等しい（欠落0）。基準日ごとにまとめて流す。"""
+    from backend.task_sync.parser import parse_text
+
+    by_today: dict[str, list[dict]] = {}
+    for case in CASES:
+        by_today.setdefault(case["today"], []).append(case)
+    total_lines = 0
+    for today, cases in by_today.items():
+        # 空行・コメント・記号だけの行も混ぜる
+        lines = [line for case in cases for line in (case["input"], "", "# メモ", "・")]
+        results = parse_text("\n".join(lines), today=date.fromisoformat(today))
+        assert len(results) == len(lines)
+        assert [result.line_no for result in results] == list(range(1, len(lines) + 1))
+        tasks = [result for result in results if result.task is not None]
+        assert len(tasks) == len(cases)  # 表の行はすべてタスクとして残る（読めない行も）
+        assert [result.task.needs_review for result in tasks] == [case["needs_review"] for case in cases]
+        total_lines += len(lines)
+    assert total_lines == len(CASES) * 4

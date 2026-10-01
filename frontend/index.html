@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#2D5F2D">
+    <meta name="theme-color" content="#4f5bd5">
     <meta name="description" content="タスクを解析してGoogleカレンダーに同期するPWA">
     <title>Task Sync - タスク同期アプリ</title>
     
@@ -17,88 +17,87 @@
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>📋 Task Sync</h1>
+        <header class="header">
+            <h1><span aria-hidden="true">📋</span> Task Sync</h1>
             <p>タスクを解析してGoogleカレンダーに同期</p>
-        </div>
+        </header>
         
         <!-- PWAインストールプロンプト -->
         <div class="install-prompt" id="installPrompt">
-            <span>📱 ホーム画面に追加してアプリとして使えます</span>
-            <button id="installBtn">追加</button>
+            <span><span aria-hidden="true">📱</span> ホーム画面に追加してアプリとして使えます</span>
+            <button type="button" id="installBtn">追加</button>
         </div>
         
-        <!-- タブ -->
-        <div class="tabs">
-            <button class="tab active" data-tab="parse">解析</button>
-            <button class="tab" data-tab="history">履歴</button>
-            <button class="tab" data-tab="stats">統計</button>
+        <!-- タブ（矢印キー・Home・End で移れる。WAI-ARIA のタブの型） -->
+        <div class="tabs" role="tablist" aria-label="表示の切り替え">
+            <button type="button" class="tab" role="tab" id="tabbtn-parse" aria-controls="tab-parse" aria-selected="true" tabindex="0" data-tab="parse">解析</button>
+            <button type="button" class="tab" role="tab" id="tabbtn-history" aria-controls="tab-history" aria-selected="false" tabindex="-1" data-tab="history">履歴</button>
+            <button type="button" class="tab" role="tab" id="tabbtn-stats" aria-controls="tab-stats" aria-selected="false" tabindex="-1" data-tab="stats">統計</button>
         </div>
         
-        <!-- タブ1: 解析 -->
-        <div class="tab-content active" id="tab-parse">
-            <div class="card">
-                <div class="input-group">
-                    <label for="taskInput">タスクを入力（1行1タスク）</label>
-                    <textarea id="taskInput" placeholder="例：&#10;青鳳会の会議資料準備 (3/15まで)&#10;お寺の掃除 (早め)&#10;詠道部の練習 (5月中)"></textarea>
-                    <div class="example">
-                        💡 日付の書き方: (3/15まで) (5月中) (早め) (至急) (来週まで)
+        <main>
+            <!-- タブ1: 解析 -->
+            <section class="tab-content" id="tab-parse" role="tabpanel" aria-labelledby="tabbtn-parse">
+                <div class="card">
+                    <div class="input-group">
+                        <label for="taskInput">タスクを入力（1行1タスク）</label>
+                        <textarea id="taskInput" aria-describedby="taskExample" placeholder="例：&#10;青鳳会の会議資料準備 (3/15まで)&#10;お寺の掃除 (早め)&#10;詠道部の練習 (5月中)"></textarea>
+                        <div class="example" id="taskExample">
+                            <span aria-hidden="true">💡</span> 日付の書き方: (3/15まで) (5月中) (早め) (至急) (来週まで)
+                        </div>
                     </div>
+                    
+                    <button type="button" class="btn btn-primary" id="parseBtn">解析する</button>
+                    
+                    <!-- 読み上げ用の知らせ（中身は app.js が入れる。自動では消さない） -->
+                    <p class="notice loading" id="loading" role="status" aria-live="polite"></p>
+                    <div class="notice error" id="error" role="alert" aria-live="assertive" aria-atomic="true"></div>
+                    <div class="notice success" id="success" role="status" aria-live="polite"></div>
                 </div>
                 
-                <button class="btn btn-primary" id="parseBtn">解析する</button>
-                
-                <div class="loading" id="loading">
-                    <p>⏳ 解析中...</p>
+                <div class="card results" id="results">
+                    <h2 class="card-title"><span aria-hidden="true">📊</span> 解析結果</h2>
+                    <ul class="task-list" id="taskList"></ul>
+                    <button type="button" class="btn btn-success sync-btn" id="syncBtn"><span aria-hidden="true">📅</span> Googleカレンダーに同期</button>
                 </div>
-                
-                <div class="error" id="error"></div>
-                <div class="success" id="success"></div>
-            </div>
+            </section>
             
-            <div class="card results" id="results">
-                <h3 class="card-title">📊 解析結果</h3>
-                <div id="taskList"></div>
-                <button class="btn btn-success sync-btn" id="syncBtn">📅 Googleカレンダーに同期</button>
-            </div>
-        </div>
-        
-        <!-- タブ2: 履歴 -->
-        <div class="tab-content" id="tab-history">
-            <div class="card">
-                <h3 class="card-title">📜 タスク履歴</h3>
-                <div id="historyList">
-                    <p class="muted">読み込み中...</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- タブ3: 統計 -->
-        <div class="tab-content" id="tab-stats">
-            <div class="card">
-                <h3 class="card-title">📈 統計情報</h3>
-                <div class="stats" id="statsGrid">
-                    <div class="stat-card">
-                        <div class="stat-number" id="statTotal">-</div>
-                        <div class="stat-label">総タスク数</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="statMonth">-</div>
-                        <div class="stat-label">今月</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="statSynced">-</div>
-                        <div class="stat-label">同期済み</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" id="statPending">-</div>
-                        <div class="stat-label">未同期</div>
+            <!-- タブ2: 履歴 -->
+            <section class="tab-content" id="tab-history" role="tabpanel" aria-labelledby="tabbtn-history" tabindex="0" hidden>
+                <div class="card">
+                    <h2 class="card-title"><span aria-hidden="true">📜</span> タスク履歴</h2>
+                    <div id="historyList">
+                        <p class="muted">読み込み中...</p>
                     </div>
                 </div>
-                <div id="categoryStats"></div>
-            </div>
-        </div>
+            </section>
+            
+            <!-- タブ3: 統計 -->
+            <section class="tab-content" id="tab-stats" role="tabpanel" aria-labelledby="tabbtn-stats" tabindex="0" hidden>
+                <div class="card">
+                    <h2 class="card-title"><span aria-hidden="true">📈</span> 統計情報</h2>
+                    <div class="stats" id="statsGrid">
+                        <div class="stat-card">
+                            <div class="stat-number" id="statTotal">-</div>
+                            <div class="stat-label">総タスク数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="statMonth">-</div>
+                            <div class="stat-label">今月</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="statSynced">-</div>
+                            <div class="stat-label">同期済み</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-number" id="statPending">-</div>
+                            <div class="stat-label">未同期</div>
+                        </div>
+                    </div>
+                    <div id="categoryStats"></div>
+                </div>
+            </section>
+        </main>
     </div>
-    
 </body>
 </html>
